@@ -14,6 +14,7 @@ git checkout main
 git push -u origin main
 
 # sync a branch from upstream
+git fetch upstream
 git checkout <branch>
 git push -u origin <branch>
 
