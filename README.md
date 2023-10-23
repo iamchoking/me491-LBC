@@ -20,6 +20,7 @@ git push -u origin <branch>
 
 # adding your homework branch
 # (in web, create your homework branch from skeleton branch)
+git fetch origin
 git checkout <mybranch>
 git push origin <mybranch>
 
