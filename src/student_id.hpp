@@ -7,7 +7,7 @@ double getOptimalValue(const Eigen::Vector<int, 12>& state){
   // return the optimal value given the state
   /// TODO
 
-  return 0.0;  // return optimal value
+  return 42.0;  // return optimal value
 }
 
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
