@@ -58,19 +58,19 @@ string dabShow(const string& dabString, const char& delimiter){
         l5 += "  4   5  ";
     }
 
-    if(dabString[ 0]  == 0){l1[1] = ' ';l1[2] = ' ';}
-    if(dabString[ 1]  == 0){l1[4] = ' ';l1[5] = ' ';}
-    if(dabString[ 2]  == 0){l3[1] = ' ';l3[2] = ' ';}
-    if(dabString[ 3]  == 0){l3[4] = ' ';l3[5] = ' ';}
-    if(dabString[ 4]  == 0){l5[1] = ' ';l5[2] = ' ';}
-    if(dabString[ 5]  == 0){l5[4] = ' ';l5[5] = ' ';}
+    if(dabString[ 0]  == '_'){l1[1] = ' ';l1[2] = ' ';}
+    if(dabString[ 1]  == '_'){l1[4] = ' ';l1[5] = ' ';}
+    if(dabString[ 2]  == '_'){l3[1] = ' ';l3[2] = ' ';}
+    if(dabString[ 3]  == '_'){l3[4] = ' ';l3[5] = ' ';}
+    if(dabString[ 4]  == '_'){l5[1] = ' ';l5[2] = ' ';}
+    if(dabString[ 5]  == '_'){l5[4] = ' ';l5[5] = ' ';}
 
-    if(dabString[ 6]  == 0){l2[0] = ' ';}
-    if(dabString[ 7]  == 0){l4[0] = ' ';}
-    if(dabString[ 8]  == 0){l2[3] = ' ';}
-    if(dabString[ 9]  == 0){l4[3] = ' ';}
-    if(dabString[10]  == 0){l2[6] = ' ';}
-    if(dabString[11]  == 0){l4[6] = ' ';}
+    if(dabString[ 6]  == '_'){l2[0] = ' ';}
+    if(dabString[ 7]  == '_'){l4[0] = ' ';}
+    if(dabString[ 8]  == '_'){l2[3] = ' ';}
+    if(dabString[ 9]  == '_'){l4[3] = ' ';}
+    if(dabString[10]  == '_'){l2[6] = ' ';}
+    if(dabString[11]  == '_'){l4[6] = ' ';}
 
     return(l1+delimiter+l2+delimiter+l3+delimiter+l4+delimiter+l5);
 }
@@ -94,7 +94,7 @@ public:
     /// the string of length 12 that holds the board info.
     string dataString;
     // the number of "boxes" that are already closed
-    char numClosed;
+    int numClosed;
     /// pointer to hash table of State objects
     map<string, State*> *stateMap;
 
@@ -138,13 +138,16 @@ public:
         stateMap = m;
 
         terminal = check(dataString);
+        numClosed = 0;
         countClosed(); // later used to determine rewards
 
+
         if(!terminal){
+
             parsed = false;
             connected = false;
             converged = false;
-            policy = rand() % size(actions); //initialize with a random policy
+            policy = 0; // randomized later
             v = 0;
         }
         else{
@@ -157,14 +160,14 @@ public:
     }
 
     /// constructor (when data is provided as Eigen::Vector<int, 12>) (delegated)
-    State(Eigen::Vector<int, 12>& data, map<string, State*> *m,ostream& os): State(dabString(data),m,os){}
+    State(const Eigen::Vector<int, 12>& data, map<string, State*> *m,ostream& os): State(dabString(data),m,os){}
 
     bool operator== (const State &s) const{return (dataString == s.dataString);}
     bool operator== (const string &m) const{return (dataString == m);}
     friend ostream& operator << (ostream& os, const State& s);
     friend ostream& operator << (ostream& os, vector<int>& P);
 
-    /// verbose output for full data analysis
+    /// more detailed output for full data analysis
     void verbose(ostream& os){
         os << "["<<this<<"]:\n" << dabShow(dataString,'\n') <<endl;
         if(terminal){
@@ -216,15 +219,13 @@ public:
         string tDataString = dataString;
         tDataString[action] = '-';
 
-        outStream << "[PARSE-TRANS "<<dataString <<"-"<<action<<"] (-> "<< tDataString << ")" << endl;
-
+        outStream << "[PARSE-TRANS "<<dataString <<"&"<<action<<"] (-> "<< tDataString << ")" << endl;
 
         // The case when Agent wins or Draws immediately
         if(check(tDataString)){ //is terminal
-            outStream << dataString << "> a:" << action <<" (T) -> " << tDataString <<" | ";
+            outStream << dataString << " > a:" << action <<" (T) -> " << tDataString <<" | ";
             transS[idx].push_back(getStatePtr(tDataString));
             transP[idx].push_back(1);
-            // transR[idx].push_back(1); // wrong implementation
             transR[idx].push_back( double( (transS[idx].back() -> numClosed) - numClosed) ); // reward is the difference in closed boxes
             return;
         }
@@ -237,21 +238,32 @@ public:
         for(auto a:oActions){
             nDataString = tDataString;
             nDataString[a] = '-';
-            outStream << dataString << "> a:" << action << "/o:" << a << " -> " << nDataString << " | ";
+            outStream << dataString << " > a:" << action << "/of:" << (a<10?" ":"") << a << " -> " << nDataString << " | ";
             transS[idx].push_back(getStatePtr(nDataString));
             transP[idx].push_back(1/double(oActions.size()));
             transR[idx].push_back( double( (transS[idx].back() -> numClosed) - numClosed) ); // reward is the difference in closed boxes
         }
+
     }
 
     /// parse the data within the state (populate all data)
     void parse(){
-        if(parsed){return;}
+        if(parsed){
+            //outStream << "[PARSE-SKIP] Skipped" << endl;
+            return;
+        }
+        outStream << "[PARSE] Parsing for ["<<dataString<<"]" << endl;
+
         parseActions();
         for(int idx = 0;idx < actions.size();idx++){
             parseTrans(idx);
         }
+
+        policy = int(rand()) % size(actions); //initialize with a random policy
+        outStream << "[PARSE-PI] Policy Initilized To [" << actions[policy] << "](idx: "<<policy <<")"<<endl;
+
         parsed = true;
+
     }
 
     /// recursively create and parse all data what is "downstream" from current state
@@ -263,6 +275,7 @@ public:
                 if(s -> connect()){}
             }
         }
+        outStream << "[CONNECT]" << "Connection of [" << dataString << "] Complete." << endl;
         connected = true;
         return true;
     }
@@ -275,17 +288,19 @@ public:
         if(stateMap -> find(newDataString) == stateMap -> end()){
             sp = new State(newDataString,stateMap,outStream);
             stateMap -> insert({newDataString,sp});
-            outStream << "[STATE " << dataString << "] Created: " << *sp << endl;
+            //outStream << "[STATE " << dataString << "] Created: " << *sp << endl;
+            outStream << "[STATE " << dataString << "] Created: [" << sp << "]" << newDataString << endl;
         }
         else{
             sp = stateMap -> find(newDataString) -> second;
-            outStream << "[STATE " << dataString << "] Linked : " << *sp << endl;
+            //outStream << "[STATE " << dataString << "] Linked : " << *sp << endl;
+            outStream << "[STATE " << dataString << "] Linked : [" << sp << "]" << newDataString << endl;
         }
         return sp;
     }
 
     /// calculates the value function (only if "downstream" states are calculated)
-    bool evalState(){ // used in the Policy Evaluation Loop //BOOKMARK
+    bool evalState(){ // used in the Policy Evaluation Loop
 
         /// return true if value is already calculated
         if(converged){return true;}
@@ -335,10 +350,12 @@ public:
             // value is not "ready" to be calculated.
         }
 
+        q.clear(); // clear q-values (outdated)
+
         double temp = 0;
         /// the VI formula is implemented here
         for(int idxx = 0; idxx < transR[policy].size();idxx++){
-            temp += transP[policy][idxx]*(transR[policy][idxx] + GAMMA*(transS[policy][idxx] -> value));
+            temp += transP[policy][idxx]*(transR[policy][idxx] + GAMMA*(transS[policy][idxx] -> v));
         }
         v = temp;
 
@@ -346,7 +363,32 @@ public:
         return true;
     }
 
+    bool improveState(){
+        if(!converged){ // all improvements need to operate on converged v
+            return false;
+        }
+
+        // calculating q
+        double temp;
+        for(int idx = 0;idx < size(actions);idx++ ){
+            temp = 0;
+            /// the VI formula is implemented here
+            for(int idxx = 0; idxx < transR[idx].size();idxx++){
+                temp += transP[idx][idxx]*(transR[idx][idxx] + GAMMA*(transS[idx][idxx] -> v));
+            }
+            q.push_back(temp);
+        }
+
+        // update policy to argmax
+        policy = int(distance(q.begin(), max_element(q.begin(),q.end())));
+
+        // initialize setup for subsequent evaluation.
+        converged = false;
+        return true;
+    }
 };
+
+
 
 /// overloaded << operator for concise output of State class varables.
 ostream & operator<< (ostream& os, const State& s) {
@@ -368,9 +410,19 @@ ostream& operator << (ostream& os, vector<int>& P) {
     return os;
 }
 
+/// overloaded << operator for easily viewing vector contents
+ostream& operator << (ostream& os, map<string, State*> m) {
+     for (auto const &pair: m) {
+         os << "\t{" << pair.first << ": " << *pair.second << "}\n";
+     }
+    return os;
+}
+
 /// Loop to create / populate the states needed for VI
-State* stateLoop(Eigen::Vector<int, 12>& startStateMat,map<string, State*> *stateMap,ostream& os){
-    auto startState = new State(startStateMat,stateMap,os);
+State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, State*> *stateMap,ostream& os){
+
+    auto startState = new State(startStateVector,stateMap,os);
+
     stateMap -> insert({startState->dataString,startState});
 
     os << "[SL] Starting State: " << *startState << endl;
@@ -381,11 +433,8 @@ State* stateLoop(Eigen::Vector<int, 12>& startStateMat,map<string, State*> *stat
 
     os << "[SL-FIN] All relevant states created (size: "<<stateMap -> size()<<"): "<<endl;
     // os << "[SL-FIN] States created. Showing stateMap (size:" << stateMap -> size() << "):" <<endl;
-    // for (auto const &pair: *stateMap) {
-    //     os << "\t{" << pair.first << ": " << *pair.second << "}\n";
-    // }
 
-    //os << startState -> stateMap << endl;
+    //os << *(startState -> stateMap) << endl;
     return startState;
 }
 
@@ -405,7 +454,7 @@ void valueIterLoop(State* s, const map<string, State*> *stateMap, ostream& os){
         for(auto e: *stateMap){
             // os << "checking: [" << e.first <<":"<< stateMap.find(e.first) -> second << "]" << endl;
             // if(e.second == 0){continue;}
-            if(e.second -> calcValue()){
+            if(e.second -> evalState()){
                 // os << *e.second << "has converged" << endl;
                 numConverged += 1;
             }
@@ -421,44 +470,49 @@ void valueIterLoop(State* s, const map<string, State*> *stateMap, ostream& os){
 
 // DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 /// final outer loop for VI workflow (executes stateLoop -> valueIterLoop & records elapsed time)
-//double getOptimalValue(Matrix3d state){
-//
-//    auto start = chrono::high_resolution_clock::now();
-//    auto now = start;
-//
-//    ofstream ofs("./log.txt");
-//    ostream& os = ofs;
-//
-//    map<string, State*> stateMap;
-//    auto s = stateLoop(state,&stateMap,os);
-//
-//    auto slDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
-//    now = chrono::high_resolution_clock::now();
-//    os << "[STATE-LOOP] Finished (elapsed time: " << slDuration.count() <<"us)" << endl;
-//
-//    valueIterLoop(s,&stateMap,os);
-//
-//    auto viDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
-//    os << "[VALUE-ITER] Finished (elapsed time: " << viDuration.count() <<"us)" << endl;
-//
-//    os << "Final Result (state analysis):"<< endl;
-//    s ->verbose(os);
-//
-//    auto totDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - start);
-//    os << "Total Elapsed Time: " << totDuration.count() << "us" << endl;
-//
-//    return s->value; // return optimal value
-//}
+double getOptimalValue(const Eigen::Vector<int, 12>& state){
+
+    auto start = chrono::high_resolution_clock::now();
+    auto now = start;
+    ofstream ofs("./log.txt");
+    ostream& os = ofs;
+    //ostream& os = cout;
+
+    map<string, State*> stateMap;
+
+    auto s = stateLoop(state,&stateMap,os);
+
+
+    auto slDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
+    now = chrono::high_resolution_clock::now();
+    os << "[STATE-LOOP] Finished (elapsed time: " << slDuration.count() <<"us)" << endl;
+
+    s -> verbose(os);
+    return 42.0;
+
+    valueIterLoop(s,&stateMap,os);
+
+    auto viDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
+    os << "[VALUE-ITER] Finished (elapsed time: " << viDuration.count() <<"us)" << endl;
+
+    os << "Final Result (state analysis):"<< endl;
+    s ->verbose(os);
+
+    auto totDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - start);
+    os << "Total Elapsed Time: " << totDuration.count() << "us" << endl;
+
+    return s->v; // return optimal value
+}
 
 
 // SKELETON: HW2
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
-double getOptimalValue(const Eigen::Vector<int, 12>& state){
-    // return the optimal value given the state
-    /// TODO
-
-    return 42.0;  // return optimal value
-}
+//double getOptimalValue(const Eigen::Vector<int, 12>& state){
+//    // return the optimal value given the state
+//
+//
+//    return 42.0;  // return optimal value
+//}
 
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 int getOptimalAction(const Eigen::Vector<int, 12>& state){
@@ -473,10 +527,11 @@ int getOptimalAction(const Eigen::Vector<int, 12>& state){
 
 //========== SKELETON CODE ==========
 int main() {
-  Eigen::Vector<int, 12> state;
+    Eigen::Vector<int, 12> state;
+    state << 0,0,0,0,0,0,0,0,0,0,0,0;
+    //cout << state << endl;
 
-  std::cout << "optimal value for the state: " << getOptimalValue(state) << std::endl;
-  std::cout << "optimal action for the state: " << getOptimalAction(state) << std::endl;
-
-  return 0;
+    std::cout << "optimal value for the state: " << getOptimalValue(state) << std::endl;
+    //std::cout << "optimal action for the state: " << getOptimalAction(state) << std::endl;
+    return 0;
 }
