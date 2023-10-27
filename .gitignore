@@ -1,3 +1,7 @@
 cmake-*
 build/
 .idea/
+
+logs/
+*/logs/*
+*/log_*.txt
