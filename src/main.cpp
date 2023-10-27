@@ -17,6 +17,9 @@ using namespace std;
 double GAMMA = 1.00;
 
 ostream& operator << (ostream& os, vector<int>& P);
+ostream& operator << (ostream& os, vector<vector<int>>& P);
+
+ostream& operator << (ostream& os, vector<double>& P);
 
 // pure functions
 
@@ -34,16 +37,14 @@ string dabString(const Eigen::Vector<int, 12>& data){
 }
 
 
-/// internal helper function to make dab-strings more readable
 //  -- --    0  1
 // |  |  |  6  8  10
 //  -- --    2   3
 // |  |  |  7  9  11
 //  -- --    4   5
 
-//  -- -- $|  |  |$ -- -- $|  |  |$ -- --
-
-string dabShow(const string& dabString, const char& delimiter){
+/// internal helper function to make dab-strings more readable
+string dabShow(const string& dabString, const char& delimiter,int tabL = 0){
     string l1 = " -- -- ";
     string l2 = "|  |  |";
     string l3 = " -- -- ";
@@ -72,21 +73,72 @@ string dabShow(const string& dabString, const char& delimiter){
     if(dabString[10]  == '_'){l2[6] = ' ';}
     if(dabString[11]  == '_'){l4[6] = ' ';}
 
+    l1 = string(tabL,'\t') + l1;
+
+    if(delimiter == '\n'){
+        l2 = string(tabL,'\t') + l2;
+        l3 = string(tabL,'\t') + l3;
+        l4 = string(tabL,'\t') + l4;
+        l5 = string(tabL,'\t') + l5;
+    }
+
     return(l1+delimiter+l2+delimiter+l3+delimiter+l4+delimiter+l5);
 }
 
-/// extracting possible actions from a given string (return: a vector of indices of '_')
-vector<int> actionsFrom(const string& dab){
-    vector<int> actions;
-    int idx;
-    for(idx = 0; idx < dab.length();idx++)
-        if(dab[idx] == '_'){actions.push_back(idx);}
-    return actions;
+/// counts how many "boxes" are already closed in this state.
+int countClosed(const string& dab){
+    int numClosed = 0;
+    if(dab[0] == '-' && dab[2] == '-' && dab[6] == '-' && dab[8 ] == '-'){numClosed += 1;}
+    if(dab[1] == '-' && dab[3] == '-' && dab[8] == '-' && dab[10] == '-'){numClosed += 1;}
+    if(dab[2] == '-' && dab[4] == '-' && dab[7] == '-' && dab[9 ] == '-'){numClosed += 1;}
+    if(dab[3] == '-' && dab[5] == '-' && dab[9] == '-' && dab[11] == '-'){numClosed += 1;}
+    return numClosed;
+}
+
+int countEmpty(const string& dab){
+    int empty = 0;
+    for(auto c:dab){if(c=='_'){empty++;}}
+    return empty;
 }
 
 /// checks the status of board given the string (true: terminal, false: non-terminal)
 bool check(const string& dab){
     return dab == "------------";
+}
+
+/// extracting possible actions from a given string (return: a vector of indices of '_')
+vector<vector<int>> actionsFrom(const string& dab,vector<int> prefix = vector<int>()){
+    vector<vector<int>> actions;
+    int closed = countClosed(dab);
+
+    int idx;
+    string temp_string = dab;
+    for(idx = 0; idx < dab.length();idx++) {
+        if (dab[idx] == '_') {
+            vector<int> a;
+            temp_string = dab;
+            temp_string[idx] = '-';
+            if(countClosed(temp_string) > closed && !check(temp_string)){ //a box was closed
+                auto nprefix = vector<int>();
+                copy(prefix.begin(),prefix.end(), back_inserter(nprefix));
+                nprefix.push_back(idx);
+                auto newActions = actionsFrom(temp_string,nprefix); //new set of actions with prefix
+                actions.insert(actions.end(),newActions.begin(),newActions.end());
+            }
+            else{
+                //vector1.insert( vector1.end(), vector2.begin(), vector2.end() );
+                //actions.push_back(vector<int>());
+                actions.emplace_back();
+                copy(prefix.begin(),prefix.end(), back_inserter(actions.back()));
+                actions.back().push_back(idx);
+            }
+        }
+    }
+    return actions;
+}
+
+void takeAction(string& dab,const vector<int>& a){
+    for(int idx:a){dab[idx] = '-';}
 }
 
 class State{
@@ -98,8 +150,8 @@ public:
     /// pointer to hash table of State objects
     map<string, State*> *stateMap;
 
-    /// vector of possible actions (action "a" means putting "O" on index a)
-    vector<int> actions;
+    /// vector of possible action sqeuences (action "{a,b,c}" means putting "1" sqeuentially on index a,b,c)
+    vector<vector<int>> actions;
 
     /// vector of possible state transitions for each action (vector in index i holds possible transitions for actions[i])
     vector<vector<State*>>  transS;
@@ -138,9 +190,7 @@ public:
         stateMap = m;
 
         terminal = check(dataString);
-        numClosed = 0;
-        countClosed(); // later used to determine rewards
-
+        numClosed = countClosed(dataString); // later used to determine rewards
 
         if(!terminal){
 
@@ -169,7 +219,8 @@ public:
 
     /// more detailed output for full data analysis
     void verbose(ostream& os){
-        os << "["<<this<<"]:\n" << dabShow(dataString,'\n') <<endl;
+        os << "Showing:" << *this << endl;
+        os << dabShow(dataString,'\n') <<endl;
         if(terminal){
             os<< "[TERMINAL STATE]"<<endl;
             return;
@@ -178,23 +229,21 @@ public:
         os << endl;
         os << "Transitions: " << endl;
         for(int idx = 0;idx < actions.size();idx++){
-            os << "\tAction[" << idx << "]: " << actions[idx]<<endl;
-            os << "\tPossible Transitions:"<<endl;
+            os << "\tAction[" << idx << "]: " << actions[idx];
+            double p = 0;
+            for(auto a:transP[idx]){p += a;}
+            os << "  >> "<< size(transS[idx]) << " Possible Transitions (probability sums to " << p <<")";
+            if(idx == policy){os << " <<< [CHOSEN BY POLICY]";}
+            os<<endl;
             for(int idxx = 0;idxx<transS[idx].size();idxx++){
-                os << "\t\t" << *transS[idx][idxx] << " (p: "<<transP[idx][idxx]<<" r: " << transR[idx][idxx] << ")" << endl;
+                os << "\t\t" << *transS[idx][idxx] << endl;
+                os << dabShow(transS[idx][idxx]->dataString,'\n',2) << endl;
+                os << "\t\t" << " (p: "<<transP[idx][idxx]<<" r: " << transR[idx][idxx] << " v: " << transS[idx][idxx] -> v << ")" << endl << endl;
             }
         }
         if(converged){os << "Current policy: " << actions[policy] << " (value: "<< v <<")"<< endl;}
     }
 
-    /// counts how many "boxes" are already closed in this state.
-    void countClosed(){
-        numClosed = 0;
-        if(dataString[0] == '-' && dataString[2] == '-' && dataString[6] == '-' && dataString[8 ] == '-'){numClosed += 1;}
-        if(dataString[1] == '-' && dataString[3] == '-' && dataString[8] == '-' && dataString[10] == '-'){numClosed += 1;}
-        if(dataString[2] == '-' && dataString[4] == '-' && dataString[7] == '-' && dataString[9 ] == '-'){numClosed += 1;}
-        if(dataString[3] == '-' && dataString[5] == '-' && dataString[9] == '-' && dataString[11] == '-'){numClosed += 1;}
-    }
 
     /// reads the dataString to populate [actions] with possible actions, and accordingly populate transX vectors with empty vectors
     void parseActions(){
@@ -210,78 +259,89 @@ public:
     }
 
     /// parses possible transformations from a single action (action[i]) -> populates transX[i]
-    void parseTrans(int idx){
-        int action = actions[idx];
+    void parseTrans(int idx,bool verbo = true){
+        auto action = actions[idx];
 
-        vector<int> oActions;
+        vector<vector<int>> oActions;
         vector<string> nDataStrings;
 
         string tDataString = dataString;
-        tDataString[action] = '-';
+        takeAction(tDataString,action);
+        //tDataString[action] = '-'; // DONE: implement placing actions
 
-        outStream << "[PARSE-TRANS "<<dataString <<"&"<<action<<"] (-> "<< tDataString << ")" << endl;
+        // reward is the difference in closed boxes
+        //reward is determined as soon as action takes place
+        auto reward = double(countClosed(tDataString)-numClosed);
 
-        // The case when Agent wins or Draws immediately
+        if(verbo){outStream << "[PARSE-TRANS "<<dataString <<"&"<<action<<"] (-> "<< tDataString << ")" << endl;}
+
+        // The case when Agent finishes the game immediately
         if(check(tDataString)){ //is terminal
-            outStream << dataString << " > a:" << action <<" (T) -> " << tDataString <<" | ";
-            transS[idx].push_back(getStatePtr(tDataString));
+            if(verbo){outStream << dataString << " > a:" << action <<" (T) -> " << tDataString <<" | ";}
+            transS[idx].push_back(getStatePtr(tDataString,verbo));
             transP[idx].push_back(1);
-            transR[idx].push_back( double( (transS[idx].back() -> numClosed) - numClosed) ); // reward is the difference in closed boxes
+            transR[idx].push_back(reward);
             return;
         }
 
         // The case when opponent gets to make a move
         oActions = actionsFrom(tDataString);
-        outStream << "Possible Opponent Actions: "<< oActions << endl;
+        if(verbo){outStream << "Possible Opponent Actions: "<< oActions << endl;}
 
         string nDataString;
+        const int empty = countEmpty(tDataString);
+
         for(auto a:oActions){
             nDataString = tDataString;
-            nDataString[a] = '-';
-            outStream << dataString << " > a:" << action << "/of:" << (a<10?" ":"") << a << " -> " << nDataString << " | ";
-            transS[idx].push_back(getStatePtr(nDataString));
-            transP[idx].push_back(1/double(oActions.size()));
-            transR[idx].push_back( double( (transS[idx].back() -> numClosed) - numClosed) ); // reward is the difference in closed boxes
+            takeAction(nDataString,a);
+            //nDataString[a] = '-'; DONE: implement action placement
+            if(verbo){outStream << dataString << " > a:" << action << "/of:" << a << " -> " << nDataString << " | ";}
+            transS[idx].push_back(getStatePtr(nDataString,verbo));
+
+            //(TRICKY) add proper probability to each opponent action
+            double de = 1; //denominator for probability
+            for(int t = 0;t<size(a);t++){de = de*(empty-t);}
+            transP[idx].push_back(1.00/de);
+            transR[idx].push_back(reward); // reward is the difference in closed boxes
         }
 
     }
 
     /// parse the data within the state (populate all data)
-    void parse(){
+    void parse(bool verbo = true){
         if(parsed){
             //outStream << "[PARSE-SKIP] Skipped" << endl;
             return;
         }
-        outStream << "[PARSE] Parsing for ["<<dataString<<"]" << endl;
+        outStream << "[PARSE] Parsing State ["<<dataString<<"]";
+        if(verbo){outStream << endl;}
 
         parseActions();
-        for(int idx = 0;idx < actions.size();idx++){
-            parseTrans(idx);
-        }
+        for(int idx = 0;idx < actions.size();idx++){parseTrans(idx,verbo);}
 
         policy = int(rand()) % size(actions); //initialize with a random policy
-        outStream << "[PARSE-PI] Policy Initilized To [" << actions[policy] << "](idx: "<<policy <<")"<<endl;
+        outStream << " ++ Policy Initialized To [" << actions[policy] << "](idx: "<<policy <<")"<<endl;
 
         parsed = true;
 
     }
 
     /// recursively create and parse all data what is "downstream" from current state
-    bool connect(){
-        parse();
+    bool connect(bool verbo){
+        parse(verbo);
         if(connected){return false;}
         for(const auto& tr:transS){
             for(auto s:tr){
-                if(s -> connect()){}
+                if(s -> connect(verbo)){}
             }
         }
-        outStream << "[CONNECT]" << "Connection of [" << dataString << "] Complete." << endl;
+        if(verbo){outStream << "[CONNECT]" << "Connection of [" << dataString << "] Complete." << endl;}
         connected = true;
         return true;
     }
 
     /// reference the hash table to return the State that represents the given data string, or create one if needed.
-    [[nodiscard]] State* getStatePtr(const string& newDataString) const{
+    [[nodiscard]] State* getStatePtr(const string& newDataString,bool verbo) const{
         State* sp;
         auto tmp = stateMap ->find(newDataString);
 
@@ -289,12 +349,12 @@ public:
             sp = new State(newDataString,stateMap,outStream);
             stateMap -> insert({newDataString,sp});
             //outStream << "[STATE " << dataString << "] Created: " << *sp << endl;
-            outStream << "[STATE " << dataString << "] Created: [" << sp << "]" << newDataString << endl;
+            if(verbo){outStream << "[STATE " << dataString << "] Created: [" << sp << "]" << newDataString << endl;}
         }
         else{
             sp = stateMap -> find(newDataString) -> second;
             //outStream << "[STATE " << dataString << "] Linked : " << *sp << endl;
-            outStream << "[STATE " << dataString << "] Linked : [" << sp << "]" << newDataString << endl;
+            if(verbo){outStream << "[STATE " << dataString << "] Linked : [" << sp << "]" << newDataString << endl;}
         }
         return sp;
     }
@@ -353,11 +413,16 @@ public:
         q.clear(); // clear q-values (outdated)
 
         double temp = 0;
+
+        //outStream << "[VI] for " << dataString << "on <"<<actions[policy]<< ">: P:" << transP[policy] << "| R:" << transR[policy]<< "| v': ";
         /// the VI formula is implemented here
-        for(int idxx = 0; idxx < transR[policy].size();idxx++){
-            temp += transP[policy][idxx]*(transR[policy][idxx] + GAMMA*(transS[policy][idxx] -> v));
+        for(int idxx = 0; idxx < size(transR[policy]);idxx++){
+            temp += transP[policy][idxx] * (transR[policy][idxx] + GAMMA*(transS[policy][idxx] -> v) );
+            //outStream << transS[policy][idxx] -> v << ", ";
         }
+        //outStream << endl;
         v = temp;
+        //outStream << "[VI] Result: " << this -> v<<endl;
 
         converged = true;
         return true;
@@ -380,11 +445,12 @@ public:
         }
 
         // update policy to argmax
+        int oldP = policy;
         policy = int(distance(q.begin(), max_element(q.begin(),q.end())));
 
         // initialize setup for subsequent evaluation.
-        converged = false;
-        return true;
+        converged = terminal;
+        return oldP != policy; // returns true if policy has changed
     }
 };
 
@@ -405,7 +471,23 @@ ostream & operator<< (ostream& os, const State& s) {
 
 /// overloaded << operator for easily viewing vector contents
 ostream& operator << (ostream& os, vector<int>& P) {
+    os << "<";
     for (int i : P)
+        os << i << "," ;
+    os << ">";
+    return os;
+}
+
+ostream& operator << (ostream& os, vector<vector<int>>& P) {
+    os << "<";
+    for (auto i : P)
+        os << i << "," ;
+    os << ">";
+    return os;
+}
+
+ostream& operator << (ostream& os, vector<double>& P) {
+    for (double i : P)
         os << i << "," ;
     return os;
 }
@@ -419,7 +501,7 @@ ostream& operator << (ostream& os, map<string, State*> m) {
 }
 
 /// Loop to create / populate the states needed for VI
-State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, State*> *stateMap,ostream& os){
+State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, State*> *stateMap,ostream& os,bool verbose = false){
 
     auto startState = new State(startStateVector,stateMap,os);
 
@@ -427,7 +509,8 @@ State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, Stat
 
     os << "[SL] Starting State: " << *startState << endl;
 
-    startState -> connect();
+    //startState -> connect(verbose);
+    startState -> connect(true);
 
     // startState -> verbose(os);
 
@@ -439,9 +522,9 @@ State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, Stat
 }
 
 /// VI loop: iterates over all states in stateMap until all of them converge (usually, it takes only one iteration!)
-void valueIterLoop(State* s, const map<string, State*> *stateMap, ostream& os){
+void policyEvalLoop(State* s, const map<string, State*> *stateMap, ostream& os){
     int numStates = int(stateMap -> size());
-    os << "\n[VI-START] Value Iteration for " << numStates << " States :" << endl;
+    os << "\t[EVAL-START] Value Iteration for " << numStates << " States :" << endl;
 
     int numConverged = 0;
     int iter = 0;
@@ -449,28 +532,43 @@ void valueIterLoop(State* s, const map<string, State*> *stateMap, ostream& os){
     while(numConverged < numStates){
         numConverged = 0;
         iter += 1;
-
         // s -> calcValue();
         for(auto e: *stateMap){
             // os << "checking: [" << e.first <<":"<< stateMap.find(e.first) -> second << "]" << endl;
             // if(e.second == 0){continue;}
+
             if(e.second -> evalState()){
                 // os << *e.second << "has converged" << endl;
                 numConverged += 1;
             }
+
         }
-        os << "[VI-ITER" << iter << "] " << numConverged << " out of " << numStates << " converged" << endl;
+        os << "\t[EVAL-ITER" << iter << "] " << numConverged << " out of " << numStates << " converged" << endl;
     }
 
-    os << "[VI-FIN] final statemap (size "<< stateMap -> size() << " ): "<<endl;
-    for (auto const &pair: *stateMap) {
-        os << "\t{" << pair.first << ": " << *pair.second << "}\n";
+    //os << "[EVAL-FIN] final statemap (size "<< stateMap -> size() << " ): "<<endl;
+    //os << *stateMap << endl;
+}
+
+int policyImprLoop(State* s, const map<string, State*> *stateMap, ostream& os){
+    int numStates = int(stateMap -> size());
+    os << "\t[IMPROVE] Policy Improvement for " << numStates << " States :" << endl;
+    int numChanged = 0;
+
+    for(auto e: *stateMap){
+        // os << "checking: [" << e.first <<":"<< stateMap.find(e.first) -> second << "]" << endl;
+        // if(e.second == 0){continue;}
+        if(e.second -> improveState()){
+            numChanged += 1;
+        }
     }
+    os << "\t[IMPROVE] " << numChanged << " states (out of " << numStates << ") changed policy" << endl;
+    return numChanged;
 }
 
 // DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
-/// final outer loop for VI workflow (executes stateLoop -> valueIterLoop & records elapsed time)
-double getOptimalValue(const Eigen::Vector<int, 12>& state){
+/// final outer loop for VI workflow (executes stateLoop -> policyEvalLoop & records elapsed time)
+double policyIteration(const Eigen::Vector<int, 12>& state){
 
     auto start = chrono::high_resolution_clock::now();
     auto now = start;
@@ -482,21 +580,41 @@ double getOptimalValue(const Eigen::Vector<int, 12>& state){
 
     auto s = stateLoop(state,&stateMap,os);
 
-
     auto slDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
     now = chrono::high_resolution_clock::now();
-    os << "[STATE-LOOP] Finished (elapsed time: " << slDuration.count() <<"us)" << endl;
 
-    s -> verbose(os);
-    return 42.0;
+    os << "[PI] stateLoop Finished (elapsed time: " << slDuration.count() <<"us)" << endl;
+    //s -> verbose(os);
 
-    valueIterLoop(s,&stateMap,os);
+    int iter = 0;
+    int updates = -1;
+    while (updates != 0) {
+        os << "[PI-" << iter << "] Started" << endl;
 
-    auto viDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
-    os << "[VALUE-ITER] Finished (elapsed time: " << viDuration.count() <<"us)" << endl;
+        policyEvalLoop(s, &stateMap, os);
+        auto peDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
+        now = chrono::high_resolution_clock::now();
+        os << "\t[PI-" << iter << "] Policy Evaluation Finished (elapsed time: " << peDuration.count() << "us)"
+           << endl;
+        os << "\t[PI-VALUE] Current value for starting state: " << s->v << endl;
+
+        os << endl;
+
+        updates = policyImprLoop(s, &stateMap, os);
+        auto piDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - now);
+        now = chrono::high_resolution_clock::now();
+        os << "\t[PI-" << iter << "] Policy Improvement Finished (elapsed time: " << piDuration.count() << "us)"<< endl;
+
+        os << endl;
+        iter++;
+    }
 
     os << "Final Result (state analysis):"<< endl;
     s ->verbose(os);
+
+
+    os << "[PI] Finished (no policy updates) in " << iter << " iterations" << endl;
+    os << "[Optimal Action: " << s -> actions[s -> policy] << ", Value: " << s -> v << "]"<< endl;
 
     auto totDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - start);
     os << "Total Elapsed Time: " << totDuration.count() << "us" << endl;
@@ -507,12 +625,10 @@ double getOptimalValue(const Eigen::Vector<int, 12>& state){
 
 // SKELETON: HW2
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
-//double getOptimalValue(const Eigen::Vector<int, 12>& state){
-//    // return the optimal value given the state
-//
-//
-//    return 42.0;  // return optimal value
-//}
+double getOptimalValue(const Eigen::Vector<int, 12>& state){
+    // return the optimal value given the state
+    return policyIteration(state);
+}
 
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 int getOptimalAction(const Eigen::Vector<int, 12>& state){
@@ -528,7 +644,29 @@ int getOptimalAction(const Eigen::Vector<int, 12>& state){
 //========== SKELETON CODE ==========
 int main() {
     Eigen::Vector<int, 12> state;
-    state << 0,0,0,0,0,0,0,0,0,0,0,0;
+    //state << 0,0,0,0,0,0,0,0,0,0,0,0; // 3.97701
+    //state << 1,0,0,0,0,0,0,0,0,0,0,0; // 3.51715
+    state << 1,1,0,0,0,0,0,0,0,0,0,0; // 3.98413
+
+    //state << 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0; // 3.2
+    //state << 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0; // 3.33333
+    //state << 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1; // 2.33333
+    //state << 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0; // 4
+    //state << 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0; // 3.33333
+
+    //Sanity Checks
+    //state << 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0; // must be 4
+
+    //auto sString = dabString(state);
+    //auto actions = actionsFrom(sString);
+    //cout << dabShow(sString,'\n')<<endl;
+    //cout << actions << endl;
+    //cout << size(actions) << " actions possible" << endl;
+    //
+    //takeAction(sString,actions[3]);
+    //cout << dabShow(sString,'\n')<<endl;
+
+
     //cout << state << endl;
 
     std::cout << "optimal value for the state: " << getOptimalValue(state) << std::endl;
