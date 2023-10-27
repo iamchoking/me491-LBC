@@ -380,46 +380,12 @@ public:
     /// calculates the value function (only if "downstream" states are calculated)
     bool evalState(){ // used in the Policy Evaluation Loop
 
-        /// return true if value is already calculated
+        // return true if value is already calculated
         if(converged){return true;}
-
-        /* the Value Iteration Method (for reference)
-        for(const auto& tr:transS){
-            for(auto s:tr){
-                if(!(s -> converged)){
-                    outStream << "[VI]" << dataString << "not ready! (" << *s << " is not (yet) converged)" << endl;
-                    return false;
-                }
-                // value is not "ready" to be calculated.
-            }
-        }
-
-        // outStream << this << endl;
-        // outStream << dataString << endl;
-        // verbose(outStream);
-
-        /// calculate state-action q for each actions[idx]
-        for(int idx = 0;idx < actions.size();idx++){
-            double temp = 0;
-            /// the VI formula is implemented here
-            for(int idxx = 0; idxx < transR[idx].size();idxx++){
-                temp += transP[idx][idxx]*(transR[idx][idxx] + GAMMA*(transS[idx][idxx] -> v));
-            }
-            q.push_back(temp);
-        }
-
-        /// choose max state-action value as value
-        v = *max_element(q.begin(),q.end());
-
-        /// choose corresponding optimal action
-        optimalAction = actions[int(max_element(q.begin(),q.end()) - q.begin())];
-        // outStream << "optimal action of " << dataString << ":" << optimalAction << endl;
-        */
 
         // Policy iteration method only has to compute the value from the action chosen by the action
         // *policy: an index of action
         // current strategy: make a move on the index actions[policy].
-
         for(auto s:transS[policy]){
             if(!(s -> converged)){
                 outStream << "[VI]" << dataString << "not ready! (" << *s << " is not (yet) converged)" << endl;
@@ -427,8 +393,6 @@ public:
             }
             // value is not "ready" to be calculated.
         }
-
-        q.clear(); // clear q-values (outdated)
 
         double temp = 0;
 
@@ -442,6 +406,7 @@ public:
         v = temp;
         //outStream << "[VI] Result: " << this -> v<<endl;
 
+        q.clear(); // clear q-values (outdated)
         converged = true;
         return true;
     }
@@ -675,7 +640,7 @@ int getOptimalAction(const Eigen::Vector<int, 12>& state){
     // return one of the optimal actions given the state.
     // the action should be represented as a state index, at which a line will be drawn.
     auto path = "./log_[" + binString(state) + "]-A";
-    auto s = policyIteration(state,path, true); //TOGGLE VERBOSITY HERE
+    auto s = policyIteration(state,path, false); //TOGGLE VERBOSITY HERE
     auto policyIdx = s -> policy;
 
     if(s -> terminal){return -1;}
