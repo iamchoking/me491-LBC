@@ -52,11 +52,11 @@ string dabShow(const string& dabString, const char& delimiter,int tabL = 0){
     string l5 = " -- -- ";
 
     if(delimiter == '\n'){
-        l1 += "  0  1   ";
-        l2 += " 6  8  10";
-        l3 += "  2   3  ";
-        l4 += " 7  9  11";
-        l5 += "  4   5  ";
+        l1 += "\t   0  1   ";
+        l2 += "\t  6  8  10";
+        l3 += "\t   2   3  ";
+        l4 += "\t  7  9  11";
+        l5 += "\t   4   5  ";
     }
 
     if(dabString[ 0]  == '_'){l1[1] = ' ';l1[2] = ' ';}
@@ -429,7 +429,7 @@ public:
     }
 
     bool improveState(){
-        if(!converged){ // all improvements need to operate on converged v
+        if(!converged || terminal){ // all improvements need to operate on converged v
             return false;
         }
 
@@ -509,8 +509,8 @@ State* stateLoop(const Eigen::Vector<int, 12>& startStateVector,map<string, Stat
 
     os << "[SL] Starting State: " << *startState << endl;
 
-    //startState -> connect(verbose);
-    startState -> connect(true);
+    startState -> connect(verbose);
+    //startState -> connect(true);
 
     // startState -> verbose(os);
 
@@ -568,11 +568,11 @@ int policyImprLoop(State* s, const map<string, State*> *stateMap, ostream& os){
 
 // DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 /// final outer loop for VI workflow (executes stateLoop -> policyEvalLoop & records elapsed time)
-double policyIteration(const Eigen::Vector<int, 12>& state){
+State* policyIteration(const Eigen::Vector<int, 12>& state,const string& logPath = "./log.txt"){
 
     auto start = chrono::high_resolution_clock::now();
     auto now = start;
-    ofstream ofs("./log.txt");
+    ofstream ofs(logPath);
     ostream& os = ofs;
     //ostream& os = cout;
 
@@ -614,12 +614,12 @@ double policyIteration(const Eigen::Vector<int, 12>& state){
 
 
     os << "[PI] Finished (no policy updates) in " << iter << " iterations" << endl;
-    os << "[Optimal Action: " << s -> actions[s -> policy] << ", Value: " << s -> v << "]"<< endl;
+    if(! s -> terminal){os << "[Optimal Action: " << s -> actions[s -> policy] << ", Value: " << s -> v << "]"<< endl;}
 
     auto totDuration = chrono::duration_cast<chrono::microseconds>(chrono::high_resolution_clock::now() - start);
     os << "Total Elapsed Time: " << totDuration.count() << "us" << endl;
 
-    return s->v; // return optimal value
+    return s; // return optimal value
 }
 
 
@@ -627,16 +627,20 @@ double policyIteration(const Eigen::Vector<int, 12>& state){
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 double getOptimalValue(const Eigen::Vector<int, 12>& state){
     // return the optimal value given the state
-    return policyIteration(state);
+    auto path = "./log_[" + dabString(state) + "]-V.txt";
+    return policyIteration(state,path) -> v;
 }
 
 /// DO NOT CHANGE THE NAME AND FORMAT OF THIS FUNCTION
 int getOptimalAction(const Eigen::Vector<int, 12>& state){
     // return one of the optimal actions given the state.
     // the action should be represented as a state index, at which a line will be drawn.
-    /// TODO
+    auto path = "./log_[" + dabString(state) + "]-A.txt";
+    auto s = policyIteration(state,path);
+    auto policyIdx = s -> policy;
 
-    return 0;  // return optimal action
+    if(s -> terminal){return -1;}
+    return s -> actions[policyIdx][0];  // return optimal action
 }
 
 //==================20190673.hpp=================
@@ -646,9 +650,11 @@ int main() {
     Eigen::Vector<int, 12> state;
     //state << 0,0,0,0,0,0,0,0,0,0,0,0; // 3.97701
     //state << 1,0,0,0,0,0,0,0,0,0,0,0; // 3.51715
-    state << 1,1,0,0,0,0,0,0,0,0,0,0; // 3.98413
+    //state << 1,1,0,0,0,0,0,0,0,0,0,0; // 3.98413
 
-    //state << 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0; // 3.2
+    state << 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0; // 3.2 ??
+        //state << 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0; // 3.2 ??
+
     //state << 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0; // 3.33333
     //state << 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1; // 2.33333
     //state << 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0; // 4
@@ -656,6 +662,8 @@ int main() {
 
     //Sanity Checks
     //state << 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0; // must be 4
+    //state << 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1; // must be 0
+
 
     //auto sString = dabString(state);
     //auto actions = actionsFrom(sString);
@@ -670,6 +678,6 @@ int main() {
     //cout << state << endl;
 
     std::cout << "optimal value for the state: " << getOptimalValue(state) << std::endl;
-    //std::cout << "optimal action for the state: " << getOptimalAction(state) << std::endl;
+    std::cout << "optimal action for the state: " << getOptimalAction(state) << std::endl;
     return 0;
 }
