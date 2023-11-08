@@ -1,11 +1,17 @@
-# move to following HW branch
+# Starting point for ME491-20190673
 
 this is a private homework repo for Learning based control.
 
 Basic manipulation references this [gist](https://gist.github.com/injoonH/84f05d64b847cc18b9aeb597362fb512) by injoonH:
 
+Cloning repo (+with upstream)
 ```sh
-# Clone
+git clone git@github.com:iamchoking/me491-LBC
+git rmote add upstream git@github.com:railabatkaist/2023_ME491.git
+```
+Manipulating Repo
+```sh
+# Initialize with Upstream
 git clone --origin upstream git@github.com:railabatkaist/2023_ME491.git me491
 cd me491
 # (create a new (private) <repo> in your github)
