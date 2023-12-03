@@ -19,10 +19,22 @@ git remote add origin git@github.com:<github-id>/<repo>.git
 git checkout main
 git push -u origin main
 
-# sync a branch from upstream
+# get a branch from upstream
 git fetch upstream
 git checkout <branch>
 git push -u origin <branch>
+
+# sync an (existing) branch from upstream
+git checkout <branch>
+# (do NOT do "origin/<branch>")
+git merge upstream/<branch>
+git push -u origin <branch>
+# may need to add options like -f
+
+# if you have your "homework" branch that needs to incorporate this as a rabase, do:
+git checkout <branch2>
+git rebase <branch>
+git push -u origin <branch2>
 
 # adding your homework branch
 # (in web, create your homework branch from skeleton branch)
