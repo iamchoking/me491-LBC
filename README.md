@@ -23,3 +23,11 @@
 ### Debugging
 1. Compile raisimgym with debug symbols: ```python3 setup develop --Debug```. This compiles <YOUR_APP_NAME>_debug_app
 2. Run it with Valgrind. I strongly recommend using Clion for 
+
+
+### (Chris)
+testing against an empty boi
+```bash
+python ME491_2023_project/env/envs/rsg_anymal/tester.py --weight ME491_2023_project/data/ME491_2023_project/2023-11-08_RUN/full_400.pt
+python ME491_2023_project/env/envs/rsg_anymal/tester.py --weight ME491_2023_project/data/ME491_2023_project/(another folder)/(another weight_###).pt
+```

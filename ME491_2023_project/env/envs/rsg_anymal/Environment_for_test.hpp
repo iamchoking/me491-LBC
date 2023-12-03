@@ -147,7 +147,7 @@ class ENVIRONMENT_for_test {
     if (timer_ > 10 * 100) {
       draw += 1;
       terminal += 1;
-      std::cout<<"draw"<<std::endl;
+      std::cout<<"draw(timeout)"<<std::endl;
       return true;
     }
 

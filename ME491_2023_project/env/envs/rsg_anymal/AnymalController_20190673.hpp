@@ -14,7 +14,7 @@
 namespace raisim {
 
 /// change the class name and file name ex) AnymalController_00000000 -> AnymalController_STUDENT_ID
-class AnymalController_00000000 {
+class AnymalController_20190673 {
 
  public:
   inline bool create(raisim::World *world) {
@@ -47,7 +47,7 @@ class AnymalController_00000000 {
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 34;
+    obDim_ = 41;
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
@@ -93,7 +93,7 @@ class AnymalController_00000000 {
     return true;
   }
 
-  inline void updateObservation(raisim::World *world) {
+  inline void updateObservation(raisim::World *world) { /// (!!!) getting observation
     anymal_->getState(gc_, gv_);
     raisim::Vec<4> quat;
     raisim::Mat<3, 3> rot;
@@ -105,6 +105,14 @@ class AnymalController_00000000 {
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    /// if you want use opponent robot`s state, use like below code
+    // auto opponent = reinterpret_cast<raisim::ArticulatedSystem *>(world->getObject(opponentName_));
+    // Eigen::VectorXd opponentGc(gcDim_);
+    // Eigen::VectorXd opponentGv(gvDim_);
+    // opponent->getState(opponentGc, opponentGv);
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+
     obDouble_ << gc_[2], /// body pose
         rot.e().row(2).transpose(), /// body orientation
         gc_.tail(12), /// joint angles
@@ -112,9 +120,55 @@ class AnymalController_00000000 {
         gv_.tail(12); /// joint velocity
   }
 
-  inline void recordReward(Reward *rewards) {
+
+  inline void updateObservationCube(raisim::World *world) { /// (!!!) getting observation
+    anymal_->getState(gc_, gv_);
+    raisim::Vec<4> quat;
+    raisim::Mat<3, 3> rot;
+    quat[0] = gc_[3];
+    quat[1] = gc_[4];
+    quat[2] = gc_[5];
+    quat[3] = gc_[6];
+    raisim::quatToRotMat(quat, rot);
+    bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
+    bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    /// if you want use opponent cube`s state, use like below code
+    auto opponent = reinterpret_cast<raisim::SingleBodyObject *>(world->getObject(opponentName_));
+
+    opponent->getPosition(opponentPos_);
+    opponent->getRotationMatrix(opponentRot_);
+    opponent->getLinearVelocity(opponentLinearVel_);
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+
+    Eigen::Vector3d relativePos = rot.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
+    Eigen::Vector3d relativeVel = rot.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
+    auto x_b = rot.e().coeff(0,0);
+    auto y_b = rot.e().coeff(0,1);
+    auto x_o = opponentRot_.e().coeff(0,0);
+    auto y_o = opponentRot_.e().coeff(0,1);
+
+    auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
+
+    obDouble_ <<                       /// Name                             Dims
+      gc_[2],                          /// body height                      1
+      rot.e().row(2).transpose(),      /// body orientation                 3
+      gc_.tail(12),                    /// joint angles                     12
+      bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity     6
+      gv_.tail(12),                    /// joint velocity                   12
+      relativePos,relativeVel,         /// relative position and velocity   6
+      headingAngle                     /// heading angle for players        1
+      ;                                /// (total)                          41
+  }
+
+  inline void recordReward(Reward *rewards) { ///(!!!) Setting rewards!
+    /// (skeleton) reward for forward running
+    /// assumed that _gc and _gv is always updated prior to calling this function.
+    rewards->record("centerDist", gc_.head(2).norm());
+    rewards->record("oppCenterDist",opponentPos_.e().head(2).norm());
     rewards->record("torque", anymal_->getGeneralizedForce().squaredNorm());
-    rewards->record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
+    rewards->record("time",1.0f);
   }
 
   inline const Eigen::VectorXd &getObservation() {
@@ -159,6 +213,11 @@ class AnymalController_00000000 {
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
+
+  raisim::Vec<3>   opponentPos_;
+  raisim::Mat<3,3> opponentRot_;
+  raisim::Vec<3>   opponentLinearVel_;
+
   int obDim_ = 0, actionDim_ = 0;
   double forwardVelRewardCoeff_ = 0.;
   double torqueRewardCoeff_ = 0.;
