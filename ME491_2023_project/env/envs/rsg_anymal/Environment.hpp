@@ -18,194 +18,228 @@
 #include "../../BasicEigenTypes.hpp"
 #include "../../Reward.hpp"
 
+/// include appropriate controller file (AnymalController_????????.hpp)
 #include TRAINING_HEADER_FILE_TO_INCLUDE
 
 namespace raisim {
 
-    class ENVIRONMENT {
+  class ENVIRONMENT {
 
-    public:
+  public:
 
-        explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
-          visualizable_(visualizable) {
-          /// add plyer
-          auto* robot = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
-          robot->setName(PLAYER_NAME);
-          controller_.setName(PLAYER_NAME);
-          robot->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
+    explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
+      visualizable_(visualizable) {
+      /// add plyer
+      auto* robot = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
+      robot->setName(PLAYER_NAME);
+      controller_.setName(PLAYER_NAME);
+      robot->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
-          /// add CUBE (x,y,z,mass)
-          cube_ = world_.addBox(2,2,2,3);
-          cube_->setName("CUBE");
-          controller_.setOpponentName("CUBE");
+      /// add CUBE (x,y,z,mass)
+      cubeMass_ = 0.5;
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,cubeMass_);
+      cube_->setName("CUBE");
+      controller_.setOpponentName("CUBE");
 
-          auto* ground = world_.addGround();
-          ground->setName("ground");
+      auto* ground = world_.addGround();
+      ground->setName("ground");
 
-          controller_.create(&world_);
-          READ_YAML(double, simulation_dt_, cfg["simulation_dt"])
-          READ_YAML(double, control_dt_, cfg["control_dt"])
+      controller_.create(&world_);
+      READ_YAML(double, simulation_dt_, cfg["simulation_dt"])
+      READ_YAML(double, control_dt_, cfg["control_dt"])
 
-          /// Reward coefficients
-          rewards_.initializeFromConfigurationFile (cfg["reward"]);
-          READ_YAML(float, terminalRewardWin_ , cfg["reward_win" ]);
-          READ_YAML(float, terminalRewardLose_, cfg["reward_lose"]);
-          READ_YAML(float, terminalRewardDraw_, cfg["reward_draw"]);
+      /// Reward coefficients
+      rewards_.initializeFromConfigurationFile (cfg["reward"]);
+      READ_YAML(float, terminalRewardWin_ , cfg["reward_win" ]);
+      READ_YAML(float, terminalRewardLose_, cfg["reward_lose"]);
+      READ_YAML(float, terminalRewardDraw_, cfg["reward_draw"]);
 
+      /// Curriculum Parameters
+      READ_YAML(int  , currWinStreak_, cfg["curriculum_win_streak"]);
+      READ_YAML(float, currMassIncr_,  cfg["curriculum_mass_incr"]);
 
-          /// visualize if it is the first environment
-          if (visualizable_) {
-            server_ = std::make_unique<raisim::RaisimServer>(&world_);
-            server_->launchServer();
-            server_->focusOn(robot);
-            auto cage = server_->addVisualCylinder("cage", 3.0, 0.05);
-            cage->setPosition(0,0,0);
-          }
+      /// visualize if it is the first environment
+      if (visualizable_) {
+        server_ = std::make_unique<raisim::RaisimServer>(&world_);
+        server_->launchServer();
+        server_->focusOn(robot);
+        // TODO: play around with server visualizations
+        std::vector<std::string> chartNames;
+        chartNames.emplace_back("CUBE");
+        auto barChart = server_->addBarChart("hehehe",chartNames);
+        auto cage = server_->addVisualCylinder("cage", 3.0, 0.05);
+        cage->setPosition(0,0,0);
+      }
+    }
+
+    void init() {}
+
+    void reset() {
+      auto theta = uniDist_(gen_) * 2 * M_PI;
+      controller_.reset(&world_, theta);
+
+      /// put back cube (random position)
+      auto cubeTheta = uniDist_(gen_) * 2 * M_PI;
+      auto cubeR = uniDist_(gen_) * 2.5;
+      cube_->setPosition(cubeR * std::sin(cubeTheta),cubeR * std::cos(cubeTheta),cube_->getDim()(2)/2);
+      // cube_->setPosition(0,0.5,1);
+      cube_->setOrientation(1,0,0,0);
+      Vec<3> zeroVel;
+      zeroVel.setZero();
+      cube_->setVelocity(zeroVel,zeroVel);
+      timer_ = 0;
+    }
+
+    float step(const Eigen::Ref<EigenVec> &action) {
+      timer_ += 1;
+      controller_.advance(&world_, action);
+      for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
+        if (server_) server_->lockVisualizationServerMutex();
+        world_.integrate();
+        if (server_) server_->unlockVisualizationServerMutex();
+      }
+      controller_.updateObservationCube(&world_); // S' (special function for cube)
+      controller_.recordReward(&rewards_);    // R
+
+      if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
+      return rewards_.sum();
+    }
+
+    void observe(Eigen::Ref<EigenVec> ob) {
+      controller_.updateObservationCube(&world_); // (special function for cube)
+      ob = controller_.getObservation().cast<float>();
+    }
+    // function to see if player died (modified from [for_test])
+    bool player_die() {
+      auto anymal = reinterpret_cast<raisim::ArticulatedSystem *>(world_.getObject(PLAYER_NAME));
+      /// base contact with ground
+      for(auto& contact: anymal->getContacts()) {
+        if(contact.getPairObjectIndex() == world_.getObject("ground")->getIndexInWorld() &&
+           contact.getlocalBodyIndex() == anymal->getBodyIdx("base")) {
+          return true; //player dies by "base" touching the ground
         }
+      }
+      /// get out of the cage
+      int gcDim = int(anymal->getGeneralizedCoordinateDim());
+      Eigen::VectorXd gc;
+      gc.setZero(gcDim);
+      gc = anymal->getGeneralizedCoordinate().e();
+      if (gc.head(2).norm() > 3) { // norm of x,y larger than 3
+        return true;
+      }
+      return false;
+    }
 
-        void init() {}
+    /// function to see if the cube died
+    bool cube_die() {
+      /// get out of the cage
+      Eigen::Vector3d gc;
+      gc = cube_->getPosition();
+      if (gc.head(2).norm() > 3) { // coordinate larger than 3
+        return true;
+      }
+      return false;
+    }
 
-        void reset() {
-          auto theta = uniDist_(gen_) * 2 * M_PI;
-          controller_.reset(&world_, theta);
+    bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
 
-          /// put back cube (static for now)
-          cube_->setPosition(1.5,1,1);
-          timer_ = 0;
-        }
+      if (player_die() && cube_die()) {
+        winStreak_ = 0;
+        termialReward = terminalRewardDraw_;
+        return true;
+      }
 
-        float step(const Eigen::Ref<EigenVec> &action) {
-          timer_ += 1;
-          controller_.advance(&world_, action);
-          for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
-            if (server_) server_->lockVisualizationServerMutex();
-            world_.integrate();
-            if (server_) server_->unlockVisualizationServerMutex();
-          }
-          controller_.updateObservationCube(&world_); // S' (special function for cube)
-          controller_.recordReward(&rewards_);    // R
-          return rewards_.sum();
-        }
+      if (timer_ > 10 * 100) {
+        winStreak_ = 0;
+        termialReward = terminalRewardDraw_;
+        return true;
+      }
 
-        void observe(Eigen::Ref<EigenVec> ob) {
-          controller_.updateObservationCube(&world_); // (special function for cube)
-          ob = controller_.getObservation().cast<float>();
-        }
-        // function to see if player died (modified from [for_test])
-        bool player_die() {
-          auto anymal = reinterpret_cast<raisim::ArticulatedSystem *>(world_.getObject(PLAYER_NAME));
-          /// base contact with ground
-          for(auto& contact: anymal->getContacts()) {
-            if(contact.getPairObjectIndex() == world_.getObject("ground")->getIndexInWorld() &&
-               contact.getlocalBodyIndex() == anymal->getBodyIdx("base")) {
-              return true;
-            }
-          }
-          /// get out of the cage
-          int gcDim = anymal->getGeneralizedCoordinateDim();
-          Eigen::VectorXd gc;
-          gc.setZero(gcDim);
-          gc = anymal->getGeneralizedCoordinate().e();
-          if (gc.head(2).norm() > 3) { // norm of x,y larger than 3
-            return true;
-          }
-          return false;
-        }
+      if (!player_die() && cube_die()) {
+        winStreak_ += 1;
+        termialReward = terminalRewardWin_;
+        return true;
+      }
 
-        /// function to see if the cube died
-        bool cube_die() {
-          /// get out of the cage
-          Eigen::Vector3d gc;
-          gc = cube_->getPosition();
-          if (gc.head(2).norm() > 3) { // coordinate larger than 3
-            return true;
-          }
-          return false;
-        }
+      if (player_die() && !cube_die()) {
+        winStreak_ = 0;
+        termialReward = terminalRewardLose_;
+        return true;
+      }
+      return false;
+    }
 
-        bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
-
-          if (player_die() && cube_die()) {
-            draw += 1;
-            terminal += 1;
-            termialReward = terminalRewardDraw_;
-            return true;
-          }
-
-          if (timer_ > 10 * 100) {
-            draw += 1;
-            terminal += 1;
-            termialReward = terminalRewardDraw_;
-            return true;
-          }
-
-          if (!player_die() && cube_die()) {
-            player_win += 1;
-            terminal += 1;
-            termialReward = terminalRewardWin_;
-            return true;
-          }
-
-          if (player_die() && !cube_die()) {
-            cube_win += 1;
-            terminal += 1;
-            termialReward = terminalRewardLose_;
-            return true;
-          }
-          return false;
-        }
-
-        void curriculumUpdate() {};
-
-        void close() { if (server_) server_->killServer(); };
-
-        void setSeed(int seed) {};
-
-        void setSimulationTimeStep(double dt) {
-          simulation_dt_ = dt;
-          world_.setTimeStep(dt);
-        }
-        void setControlTimeStep(double dt) { control_dt_ = dt; }
-
-        int getObDim() { return controller_.getObDim(); }
-
-        int getActionDim() { return controller_.getActionDim(); }
-
-        double getControlTimeStep() { return control_dt_; }
-
-        double getSimulationTimeStep() { return simulation_dt_; }
-
-        raisim::World *getWorld() { return &world_; }
-
-        void turnOffVisualization() { server_->hibernate(); }
-
-        void turnOnVisualization() { server_->wakeup(); }
-
-        void startRecordingVideo(const std::string &videoName) { server_->startRecordingVideo(videoName); }
-
-        void stopRecordingVideo() { server_->stopRecordingVideo(); }
-
-        raisim::Reward& getRewards() { return rewards_; }
-
-    private:
-        int timer_ = 0;
-        int player_win = 0, cube_win = 0, draw = 0, terminal = 0;
-
-        bool visualizable_ = false;
-        float terminalRewardWin_ ;
-        float terminalRewardLose_;
-        float terminalRewardDraw_;
-        TRAINING_CONTROLLER controller_;
-        raisim::Box* cube_;
-
-        raisim::World world_;
-        raisim::Reward rewards_;
-        double simulation_dt_ = 0.001;
-        double control_dt_ = 0.01;
-        std::unique_ptr<raisim::RaisimServer> server_;
-        thread_local static std::uniform_real_distribution<double> uniDist_;
-        thread_local static std::mt19937 gen_;
+    void curriculumUpdate() {
+      if(winStreak_ >= currWinStreak_){
+        cubeMass_ += currMassIncr_;
+        cube_->setMass(cubeMass_);
+        winStreak_ = 0;
+        if(visualizable_){std::cout << "Visualized ENV cube upgraded to: " << cubeMass_ << "KG";}
+      }
     };
-    thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
-    thread_local std::uniform_real_distribution<double> raisim::ENVIRONMENT::uniDist_(0., 1.);
+
+    void close() { if (server_) server_->killServer(); };
+
+    void setSeed(int seed) {};
+
+    void setSimulationTimeStep(double dt) {
+      simulation_dt_ = dt;
+      world_.setTimeStep(dt);
+    }
+    void setControlTimeStep(double dt) { control_dt_ = dt; }
+
+    int getObDim() { return controller_.getObDim(); }
+
+    int getActionDim() { return controller_.getActionDim(); }
+
+    double getControlTimeStep() { return control_dt_; }
+
+    double getSimulationTimeStep() { return simulation_dt_; }
+
+    raisim::World *getWorld() { return &world_; }
+
+    void turnOffVisualization() {
+      server_->hibernate();
+      doPrint_=false;
+    }
+
+    void turnOnVisualization() {
+      server_->wakeup();
+      doPrint_=true;
+    }
+
+    void startRecordingVideo(const std::string &videoName) { server_->startRecordingVideo(videoName); }
+
+    void stopRecordingVideo() { server_->stopRecordingVideo(); }
+
+    raisim::Reward& getRewards() { return rewards_; }
+
+  private:
+    int timer_ = 0;
+    int winStreak_ = 0;
+
+    bool visualizable_ = false;
+    bool doPrint_ = false;
+
+    double cubeMass_ = 0.5;
+
+    int currWinStreak_;
+    double currMassIncr_;
+
+    float terminalRewardWin_ ;
+    float terminalRewardLose_;
+    float terminalRewardDraw_;
+    TRAINING_CONTROLLER controller_;
+    raisim::Box* cube_;
+
+    raisim::World world_;
+    raisim::Reward rewards_;
+    double simulation_dt_ = 0.001;
+    double control_dt_ = 0.01;
+    std::unique_ptr<raisim::RaisimServer> server_;
+    thread_local static std::uniform_real_distribution<double> uniDist_;
+    thread_local static std::mt19937 gen_;
+  };
+  thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
+  thread_local std::uniform_real_distribution<double> raisim::ENVIRONMENT::uniDist_(0., 1.);
 }

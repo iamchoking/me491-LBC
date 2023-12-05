@@ -1,0 +1,4 @@
+setuptools~=68.0.0
+torch~=2.1.1
+numpy~=1.26.1
+keyboard~=0.13.5

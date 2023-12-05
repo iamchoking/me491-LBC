@@ -126,12 +126,12 @@ for update in range(1000000):
         env.save_scaling(saver.data_dir, str(update))
 
     # actual training
-    for step in range(n_steps):                               # (parallelized)
-        obs = env.observe()                                   # get S
-        action = ppo.act(obs)                                 # retrieve A from actor
-        reward, dones = env.step(action)                      # take action in env & retrieve R and S'
-        ppo.step(value_obs=obs, rews=reward, dones=dones)     # do the PPO update for R and S'
-        done_sum = done_sum + np.sum(dones)                   #
+    for step in range(n_steps):
+        obs = env.observe()
+        action = ppo.act(obs)
+        reward, dones = env.step(action)
+        ppo.step(value_obs=obs, rews=reward, dones=dones)
+        done_sum = done_sum + np.sum(dones)
         reward_sum = reward_sum + np.sum(reward)
 
     # take st step to get value obs
