@@ -240,7 +240,8 @@ class AnymalController_20190673 {
     // ^ rot_(1,2) x component of unit z vector at 0, rot_(2,2) y component of ~
 
     // [too close to the edge (1m)]
-    rewards->record("edge",float(std::max(2.0,gc_.head(2).norm())-2.0));
+    if(opponentPos_.e().head(2).norm() > gc_.head(2).norm()){rewards -> record("edge",0);} // don't penalize when opponent is being pushed off
+    else{rewards->record("edge",float(std::max(2.0,gc_.head(2).norm())-2.0));}
 
     /// PROMOTE
 

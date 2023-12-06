@@ -20,9 +20,9 @@ environment:
 
   reward:
     class:
-      coeff: 0.01   # !time and class must have exact opposite coeffs!
+      coeff: 0.05   # !time and class must have exact opposite coeffs!
     time:
-      coeff: -0.01  # !time and class must have exact opposite coeffs!
+      coeff: -0.05  # !time and class must have exact opposite coeffs!
 
 #    [STD]
 ##    PENALIZE
@@ -33,7 +33,7 @@ environment:
     tilt:
       coeff: -0.1
     edge:
-      coeff: -0.3
+      coeff: -0.05
 
 #    PROMOTE
     face:
