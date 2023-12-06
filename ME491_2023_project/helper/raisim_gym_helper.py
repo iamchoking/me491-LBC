@@ -20,7 +20,7 @@ class ConfigurationSaver:
         return self._data_dir
 
 
-def tensorboard_launcher(directory_path):
+def tensorboard_launcher(directory_path, open_browser=True):
     from tensorboard import program
     import webbrowser
     # learning visualizer
@@ -28,7 +28,8 @@ def tensorboard_launcher(directory_path):
     tb.configure(argv=[None, '--logdir', directory_path])
     url = tb.launch()
     print("[RAISIM_GYM] Tensorboard session created: "+url)
-    webbrowser.open_new(url)
+    if open_browser:
+        webbrowser.open_new(url)
 
 
 def load_param(weight_path, env, actor, critic, optimizer, data_dir):

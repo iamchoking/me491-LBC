@@ -42,23 +42,28 @@ class AnymalController_20190673 {
     /// set pd gains
     Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
     jointPgain.setZero();
-    jointPgain.tail(nJoints_).setConstant(50.0);
+    jointPgain.tail(nJoints_).setConstant(100.0);
     jointDgain.setZero();
     jointDgain.tail(nJoints_).setConstant(0.2);
     anymal_->setPdGains(jointPgain, jointDgain);
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 41;
+    obDim_ = 64; // always padded to 64 (for compatibility)
+    // ACTUAL DIMS: 42
+    obPaddingDim_ = 64-42;
+    obPadding_.setZero(obPaddingDim_);
+
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
+    obFloat_.setZero(obDim_);
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
-    // actionStd_.setConstant(0.1);
-    actionStd_.setConstant(0.2);
+    actionStd_.setConstant(0.1);
+    // actionStd_.setConstant(0.2);
 
     /// indices of links that should not make contact with ground
     footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
@@ -83,15 +88,22 @@ class AnymalController_20190673 {
     return true;
   }
 
-  inline bool reset(raisim::World *world, double theta) {
+  inline bool reset(raisim::World *world, double theta) { //TODO change the reset back to what it was
     if (playerNum_ == 0) {
-      gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;
-      gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2);
+      gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;                 //position
+      gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2); //rotation
+
+      // gc_init_.head(3) << 2.5 * std::cos(theta), 2.5 * std::sin(theta), 0.5;                 //position
+      // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
     }
     else {
       gc_init_.head(3) << 1.5 * std::cos(theta + M_PI), 1.5 * std::sin(theta + M_PI), 0.5;
       gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);
+
+      // gc_init_.head(3) << 2.5 * std::cos(theta + M_PI), 2.5 * std::sin(theta + M_PI), 0.5;
+      // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
     }
+
     anymal_->setState(gc_init_, gv_init_);
     return true;
   }
@@ -99,13 +111,12 @@ class AnymalController_20190673 {
   inline void updateObservation(raisim::World *world) { /// (!!!) getting observation
     anymal_->getState(gc_, gv_);
     raisim::Vec<4> quat;
-    raisim::Mat<3, 3> rot_;
     quat[0] = gc_[3];
     quat[1] = gc_[4];
     quat[2] = gc_[5];
     quat[3] = gc_[6];
     raisim::quatToRotMat(quat, rot_);
-    bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
+    bodyLinearVel_  = rot_.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -121,6 +132,12 @@ class AnymalController_20190673 {
         gc_.tail(12), /// joint angles
         bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
         gv_.tail(12); /// joint velocity
+    // obFloat_ << gc_[2], /// body pose
+    //     rot_.e().row(2).transpose(), /// body orientation
+    //     gc_.tail(12), /// joint angles
+    //     bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
+    //     gv_.tail(12); /// joint velocity
+
   }
 
 
@@ -144,7 +161,10 @@ class AnymalController_20190673 {
     opponent->getLinearVelocity(opponentLinearVel_);
     ///////////////////////////////////////////////////////////////////////////////////////////////
 
-    Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
+    // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
+    Vec<3> relativePos;
+    anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
+
     Eigen::Vector3d relativeVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
     auto x_b = rot_.e().coeff(0,0);
     auto y_b = rot_.e().coeff(0,1);
@@ -153,27 +173,34 @@ class AnymalController_20190673 {
 
     auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
 
-    obDouble_ <<                       /// Name                             Dims
-      gc_[2],                          /// body height                      1
-      rot_.e().row(2).transpose(),      /// body orientation                 3
-      gc_.tail(12),                    /// joint angles                     12
-      bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity     6
-      gv_.tail(12),                    /// joint velocity                   12
-      relativePos,relativeVel,         /// relative position and velocity   6
-      headingAngle                     /// heading angle for players        1
-      ;                                /// (total)                          41
+    // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
+    // std::cout << obPadding_ << "garbled?" <<std::endl;
+
+    obDouble_ <<                         /// Name                             Dims
+       gc_[2]                            /// body height                      1
+      ,rot_.e().row(2).transpose()     /// body orientation                 3
+      ,gc_.tail(12)                   /// joint angles                     12
+      ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
+      ,gv_.tail(12)                   /// joint velocity                   12
+      ,relativePos.e(),relativeVel       /// relative position and velocity   6
+      ,headingAngle                      /// heading angle for players        1
+      ,gc_.head(2).norm()             /// center distance                  1
+      ,obPadding_                        /// padding                          (12)
+      ;                                  /// (total+padding)                  42+12
   }
 
   inline void recordReward(Reward *rewards) { ///(!!!) Setting rewards!
     /// (skeleton) reward for forward running
     /// assumed that _gc and _gv is always updated prior to calling this function.
-    // rewards->record("time",1.0f);
     bool opponentContact = false;
 
     /// MASS of opponent (this is mainly for graphing purposes)
-    rewards->record("class",float(world_->getObject(opponentName_)->getMass(0)));
+    auto opponentMass = world_->getObject(opponentObjectIdx_)->getMass(0);
+    rewards->record("class",float(opponentMass));
 
     /// PENALIZE
+    // [time]
+    rewards->record("time",float(opponentMass)+1.0f); //this cancels out with class to yield a constant negative reward
 
     // [slipping & no feet contact]
     Vec<3> bContact;
@@ -217,7 +244,7 @@ class AnymalController_20190673 {
 
     /// PROMOTE
 
-    // "facing the opponent"
+    // ["facing the opponent"]
     Vec<3> relPos;
     double angle;
     anymal_->getPositionInBodyCoordinate(0,opponentPos_,relPos); //relPos: vector of opponent position in world frame
@@ -225,16 +252,18 @@ class AnymalController_20190673 {
     // std::cout <<"\rfacing angle : " << angle/M_PI*180.0 << std::endl;
     rewards->record("face",float(-abs(angle)/(2*M_PI))); //scaled to (-1 ~ 0)
 
-    // closing relative velocity
+    // [closing relative velocity]
     Eigen::Vector3d eRelPos = relPos.e();
     eRelPos.normalize();
     // reward velocity facing toward opponent,
-    float ramPoint = std::min(3.0f,std::max(-3.0f,(float(eRelPos.dot(rot_.e().transpose() * gv_.segment(0, 3))))));
-    if(opponentContact){ramPoint+=1;} // when in contact, give full mark plus extra (always promote contact)
+    float ramPoint = std::min(3.0f,std::max(-3.0f,(float(eRelPos.dot(rot_.e().transpose() * gv_.segment(0, 3)))))) / 6.0f + 0.5f; //scaled to 0~1
+    if(opponentContact){
+      ramPoint+=ramPoint*float(1+opponentMass/anymal_->getMass(0))+1; // when in contact, get full mark + scaled for mass (proportional to resulting momentum)
+    } // when in contact, give full mark plus extra (always promote contact)
 
     rewards->record("ram",ramPoint);
 
-    // "T-boning opponent" (TODO)
+    // "T-boning opponent" TODO
 
   }
 
@@ -298,6 +327,7 @@ class AnymalController_20190673 {
   raisim::Mat<3, 3> rot_;
 
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
+  Eigen::VectorXf obFloat_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
 
@@ -305,7 +335,8 @@ class AnymalController_20190673 {
   raisim::Mat<3,3> opponentRot_;
   raisim::Vec<3>   opponentLinearVel_;
 
-  int obDim_ = 0, actionDim_ = 0;
+  Eigen::VectorXd obPadding_;
+  int obDim_ = 0, actionDim_ = 0, obPaddingDim_ = 0;
 };
 
 }
