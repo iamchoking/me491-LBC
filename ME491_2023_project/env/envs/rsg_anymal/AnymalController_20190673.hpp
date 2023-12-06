@@ -174,7 +174,7 @@ class AnymalController_20190673 {
     auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
 
     // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
-    // std::cout << obPadding_ << "garbled?" <<std::endl;
+    // std::cout << obPadding_ << "garbled?" <<std::endl ;
 
     obDouble_ <<                         /// Name                             Dims
        gc_[2]                            /// body height                      1
