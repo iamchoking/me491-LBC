@@ -64,7 +64,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/ME491_2023_project/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/runner.py", task_path + "/Environment.hpp"])
-tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+tensorboard_launcher(saver.data_dir+"/..", False)  # press refresh (F5) after the first ppo update
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -84,6 +84,8 @@ reward_analyzer = RewardAnalyzer(env, ppo.writer)
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
 
+env.turn_off_visualization()
+
 for update in range(1000000):
     start = time.time()
     env.reset()
@@ -91,7 +93,7 @@ for update in range(1000000):
     done_sum = 0
     average_dones = 0.
 
-    if update % cfg['environment']['eval_every_n'] == 0:
+    if (update % cfg['environment']['eval_every_n'] == 0 and update != 0) or cfg['environment']['eval_every_n'] == 1:
         print("Visualizing and evaluating the current policy")
         torch.save({
             'actor_architecture_state_dict': actor.architecture.state_dict(),
@@ -110,6 +112,7 @@ for update in range(1000000):
             with torch.no_grad():
                 frame_start = time.time()
                 obs = env.observe(False)
+                # print(obs[0]) CHECK OBS HERE
                 action = loaded_graph.architecture(torch.from_numpy(obs).cpu())
                 reward, dones = env.step(action.cpu().detach().numpy())
                 reward_analyzer.add_reward_info(env.get_reward_info())
@@ -124,15 +127,38 @@ for update in range(1000000):
         reward_analyzer.analyze_and_plot(update)
         env.reset()
         env.save_scaling(saver.data_dir, str(update))
+        print("Visualization Complete")
 
+    # time measurements
+    curTime = time.time()
+    t_observe = 0
+    t_action  = 0
+    t_envstep = 0
+    t_ppostep = 0
+    t_summing = 0
+    t_backprop = 0
     # actual training
     for step in range(n_steps):
         obs = env.observe()
+        t_observe += time.time()-curTime
+        curTime = time.time()
+
         action = ppo.act(obs)
+        t_action += time.time()-curTime
+        curTime = time.time()
+
         reward, dones = env.step(action)
+        t_envstep += time.time()-curTime
+        curTime = time.time()
+
         ppo.step(value_obs=obs, rews=reward, dones=dones)
+        t_ppostep += time.time()-curTime
+        curTime = time.time()
+
         done_sum = done_sum + np.sum(dones)
         reward_sum = reward_sum + np.sum(reward)
+        t_summing += time.time()-curTime
+        curTime = time.time()
 
     # take st step to get value obs
     obs = env.observe()
@@ -143,6 +169,7 @@ for update in range(1000000):
 
     actor.update()
     actor.distribution.enforce_minimum_std((torch.ones(12)*0.2).to(device))
+    t_backprop = time.time() - curTime
 
     # curriculum update. Implement it in Environment.hpp
     env.curriculum_callback()
@@ -157,4 +184,9 @@ for update in range(1000000):
     print('{:<40} {:>6}'.format("fps: ", '{:6.0f}'.format(total_steps / (end - start))))
     print('{:<40} {:>6}'.format("real time factor: ", '{:6.0f}'.format(total_steps / (end - start)
                                                                        * cfg['environment']['control_dt'])))
+    print('----------------------------------------------------')
+    print('{:<10}|{:<10}|{:<10}|{:<10}|{:<10}|{:<10}|{:<10}|'.format('observe','action','envstep','ppostep','summing','backprop','etc.'))
+    print('{:1.8f}|{:1.8f}|{:1.8f}|{:1.8f}|{:1.8f}|{:1.8f}|{:1.8f}|'.format(t_observe,t_action ,t_envstep,t_ppostep,t_summing,t_backprop,(end-start)-sum((t_observe,t_action,t_envstep,t_ppostep,t_summing,t_backprop))))
     print('----------------------------------------------------\n')
+
+

@@ -18,7 +18,11 @@
 #include "../../BasicEigenTypes.hpp"
 #include "../../Reward.hpp"
 
+/// include appropriate controller file (AnymalController_????????.hpp)
 #include TRAINING_HEADER_FILE_TO_INCLUDE
+#include <chrono>
+
+bool TIME_VERBOSE = false;
 
 namespace raisim {
 
@@ -29,13 +33,14 @@ namespace raisim {
     explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
       visualizable_(visualizable) {
       /// add plyer
-      auto* robot = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
-      robot->setName(PLAYER_NAME);
+      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
+      robot_->setName(PLAYER_NAME);
       controller_.setName(PLAYER_NAME);
-      robot->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
+      robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// add CUBE (x,y,z,mass)
-      cube_ = world_.addBox(1,1,1,0.3);
+      cubeMass_ = 1.0;
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,cubeMass_);
       cube_->setName("CUBE");
       controller_.setOpponentName("CUBE");
 
@@ -52,12 +57,22 @@ namespace raisim {
       READ_YAML(float, terminalRewardLose_, cfg["reward_lose"]);
       READ_YAML(float, terminalRewardDraw_, cfg["reward_draw"]);
 
+      /// Curriculum Parameters
+      READ_YAML(int   , currWinStreak_, cfg["curriculum_win_streak"]);
+      READ_YAML(float , currMassIncr_,  cfg["curriculum_mass_incr"]);
+      READ_YAML(double, cubeMass_    ,  cfg["curriculum_mass_start"]);
+      cube_->setMass(cubeMass_);
 
       /// visualize if it is the first environment
       if (visualizable_) {
         server_ = std::make_unique<raisim::RaisimServer>(&world_);
         server_->launchServer();
-        server_->focusOn(robot);
+        server_->focusOn(ground);
+        // TODO: play around with server visualizations
+        // std::vector<std::string> chartNames;
+        // chartNames.emplace_back("CUBE");
+        // auto barChart = server_->addBarChart("hehehe",chartNames);
+
         auto cage = server_->addVisualCylinder("cage", 3.0, 0.05);
         cage->setPosition(0,0,0);
       }
@@ -69,27 +84,75 @@ namespace raisim {
       auto theta = uniDist_(gen_) * 2 * M_PI;
       controller_.reset(&world_, theta);
 
-      /// put back cube (static for now)
-      cube_->setPosition(1.5,1,1);
+      /// put back cube (random position)
+      Eigen::Vector3d cubePos;
+      Vec<3> robotPos;
+      robot_->getPosition(0,robotPos);
+      cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2;
+      while(cubePos.head(2).norm() > 2.5 || (cubePos.head(2)-robotPos.e().head(2)).norm() < 1 ){
+        cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2; //resample when inadequate
+      }
+      cube_->setPosition(cubePos);
+
+      /// put back cube (fixed position)
+      // cube_->setPosition(0,0.5,1);
+
+      /// put back cube (random angle)
+      auto cubeAngle = uniDist_(gen_)*2*M_PI;
+      cube_->setOrientation(cos((cubeAngle - M_PI) / 2), 0, 0, sin((cubeAngle - M_PI) / 2));
+
+      /// put back cube (fixed angle)
+      // cube_->setOrientation(1, 0, 0, 0);
+
+      /// zero out velocity
+      Vec<3> zeroVel;
+      zeroVel.setZero();
+      cube_->setVelocity(zeroVel,zeroVel);
+
       timer_ = 0;
     }
 
     float step(const Eigen::Ref<EigenVec> &action) {
+
+      auto curTime = std::chrono::high_resolution_clock::now();
+
       timer_ += 1;
       controller_.advance(&world_, action);
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] advance controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
       for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
         if (server_) server_->lockVisualizationServerMutex();
         world_.integrate();
         if (server_) server_->unlockVisualizationServerMutex();
       }
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] integrate and publish : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
       controller_.updateObservationCube(&world_); // S' (special function for cube)
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] update observation for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
       controller_.recordReward(&rewards_);    // R
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] record reward for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
+      if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
       return rewards_.sum();
     }
 
     void observe(Eigen::Ref<EigenVec> ob) {
-      controller_.updateObservationCube(&world_); // (special function for cube)
+      auto curTime = std::chrono::high_resolution_clock::now();
+
+      controller_.updateObservationCube(&world_); // (special function for cube) (NOT INLCUDED IN RAISIMGYMTORCH)
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[OBS] observing for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
+
       ob = controller_.getObservation().cast<float>();
+      if(visualizable_ && TIME_VERBOSE){std::cout << "[OBS] casting observation : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
+      curTime = std::chrono::high_resolution_clock::now();
+
     }
     // function to see if player died (modified from [for_test])
     bool player_die() {
@@ -98,11 +161,11 @@ namespace raisim {
       for(auto& contact: anymal->getContacts()) {
         if(contact.getPairObjectIndex() == world_.getObject("ground")->getIndexInWorld() &&
            contact.getlocalBodyIndex() == anymal->getBodyIdx("base")) {
-          return true;
+          return true; //player dies by "base" touching the ground
         }
       }
       /// get out of the cage
-      int gcDim = anymal->getGeneralizedCoordinateDim();
+      int gcDim = int(anymal->getGeneralizedCoordinateDim());
       Eigen::VectorXd gc;
       gc.setZero(gcDim);
       gc = anymal->getGeneralizedCoordinate().e();
@@ -126,36 +189,39 @@ namespace raisim {
     bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
 
       if (player_die() && cube_die()) {
-        draw += 1;
-        terminal += 1;
+        winStreak_ = 0;
         termialReward = terminalRewardDraw_;
         return true;
       }
 
       if (timer_ > 10 * 100) {
-        draw += 1;
-        terminal += 1;
+        winStreak_ = 0;
         termialReward = terminalRewardDraw_;
         return true;
       }
 
       if (!player_die() && cube_die()) {
-        player_win += 1;
-        terminal += 1;
+        winStreak_ += 1;
         termialReward = terminalRewardWin_;
         return true;
       }
 
       if (player_die() && !cube_die()) {
-        cube_win += 1;
-        terminal += 1;
+        winStreak_ = 0;
         termialReward = terminalRewardLose_;
         return true;
       }
       return false;
     }
 
-    void curriculumUpdate() {};
+    void curriculumUpdate() {
+      if(winStreak_ >= currWinStreak_){
+        cubeMass_ += currMassIncr_;
+        cube_->setMass(cubeMass_);
+        winStreak_ = 0;
+        if(visualizable_){std::cout << "Visualized ENV cube upgraded to: " << cubeMass_ << "KG" << std::endl;}
+      }
+    };
 
     void close() { if (server_) server_->killServer(); };
 
@@ -177,9 +243,15 @@ namespace raisim {
 
     raisim::World *getWorld() { return &world_; }
 
-    void turnOffVisualization() { server_->hibernate(); }
+    void turnOffVisualization() {
+      server_->hibernate();
+      doPrint_=false;
+    }
 
-    void turnOnVisualization() { server_->wakeup(); }
+    void turnOnVisualization() {
+      server_->wakeup();
+      doPrint_=true;
+    }
 
     void startRecordingVideo(const std::string &videoName) { server_->startRecordingVideo(videoName); }
 
@@ -189,9 +261,16 @@ namespace raisim {
 
   private:
     int timer_ = 0;
-    int player_win = 0, cube_win = 0, draw = 0, terminal = 0;
+    int winStreak_ = 0;
 
     bool visualizable_ = false;
+    bool doPrint_ = false;
+
+    double cubeMass_ = 0.5;
+
+    int currWinStreak_;
+    double currMassIncr_;
+
     float terminalRewardWin_ ;
     float terminalRewardLose_;
     float terminalRewardDraw_;
@@ -199,6 +278,8 @@ namespace raisim {
     raisim::Box* cube_;
 
     raisim::World world_;
+    raisim::ArticulatedSystem* robot_;
+
     raisim::Reward rewards_;
     double simulation_dt_ = 0.001;
     double control_dt_ = 0.01;
