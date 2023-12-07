@@ -33,28 +33,21 @@ namespace raisim {
     explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
       visualizable_(visualizable) {
       /// add player
-      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_red.urdf");
+      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_red.urdf"); //YOU  are always red!
       robot_->setName(PLAYER_NAME);
-      controller_.setPlayerNum(0);
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// add opponent (with same controller)
-      opponent_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
-      opponent_->setName("OPPONENT");
-      opponentController_.setPlayerNum(1);
-      opponentController_.setName("OPPONENT");
-      opponent_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
-
+      cubeMass_ = 1.0;
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*1.3+0.2,cubeMass_);
+      cube_->setName("OPPONENT");
       controller_.setOpponentName("OPPONENT");
-      opponentController_.setOpponentName(PLAYER_NAME);
 
       auto* ground = world_.addGround();
       ground->setName("ground");
 
       controller_.create(&world_);
-      opponentController_.create(&world_);
-
       READ_YAML(double, simulation_dt_, cfg["simulation_dt"])
       READ_YAML(double, control_dt_, cfg["control_dt"])
 
@@ -68,6 +61,15 @@ namespace raisim {
       READ_YAML(int   , currWinStreak_, cfg["curriculum_win_streak"]);
       READ_YAML(float , currMassIncr_,  cfg["curriculum_mass_incr"]);
       READ_YAML(double, cubeMass_    ,  cfg["curriculum_mass_start"]);
+      cube_->setMass(cubeMass_);
+
+      /// Stability Training Params
+      float stabCubeTime;
+      READ_YAML(float, stabCubeTime    ,  cfg["stability_cube_teleport"]);
+      READ_YAML(float, stabWinDecay_   ,  cfg["stability_win_decay"]);
+      READ_YAML(bool , stabMode_       ,  cfg["stability_mode"]);
+      if(stabCubeTime <= 0.0){stabCubeSteps_ = 1000000;}
+      else{stabCubeSteps_ = int(stabCubeTime/control_dt_);}
 
       /// visualize if it is the first environment
       if (visualizable_) {
@@ -89,24 +91,53 @@ namespace raisim {
     void reset() {
       auto theta = uniDist_(gen_) * 2 * M_PI;
 
-      // std::cout << "Env L87" << std::endl;
-      controller_.reset(&world_, theta);
-      // std::cout << "Env L90" << std::endl;
-
-      opponentController_.reset(&world_,theta);
-      // std::cout << "Env L93" << std::endl;
+      if(stabMode_ && winStreak_ > 0){}
+      else{controller_.reset(&world_, theta);}
+      reset_cube();
 
       timer_ = 0;
     }
 
-    float step(const Eigen::Ref<EigenVec> &action,const Eigen::Ref<EigenVec> &opponentAction) {
+    void reset_cube(){
+      // world_.removeObject(reinterpret_cast<Object*>(cube_));
+      world_.removeObject(cube_);
+
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*1.3+0.2,cubeMass_);
+      cube_->setName("OPPONENT");
+
+      /// put back cube (random position)
+      Eigen::Vector3d cubePos;
+      Vec<3> robotPos;
+      robot_->getPosition(0,robotPos);
+      cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2;
+      while(cubePos.head(2).norm() > 2.5 || (cubePos.head(2)-robotPos.e().head(2)).norm() < 1 ){
+        cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2; //resample when inadequate
+      }
+      cube_->setPosition(cubePos);
+
+      /// put back cube (fixed position)
+      // cube_->setPosition(0,0.5,1);
+
+      /// put back cube (random angle)
+      auto cubeAngle = uniDist_(gen_)*2*M_PI;
+      cube_->setOrientation(cos((cubeAngle - M_PI) / 2), 0, 0, sin((cubeAngle - M_PI) / 2));
+
+      /// put back cube (fixed angle)
+      // cube_->setOrientation(1, 0, 0, 0);
+
+      /// zero out velocity
+      Vec<3> zeroVel;
+      zeroVel.setZero();
+      cube_->setVelocity(zeroVel,zeroVel);
+
+    }
+
+    float step(const Eigen::Ref<EigenVec> &action) {
 
       auto curTime = std::chrono::high_resolution_clock::now();
 
       timer_ += 1;
-
       controller_.advance(&world_, action);
-      opponentController_.advance(&world_, opponentAction);
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] advance controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
@@ -118,38 +149,38 @@ namespace raisim {
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] integrate and publish : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
+      // controller_.updateObservationCube(&world_); // S' (special function for cube)
       controller_.updateObservation(&world_);
-      opponentController_.updateObservation(&world_); //BOOKMARK
-
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] update observation for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
-      controller_.recordReward(&rewards_);    // only needed for "training" controller
+      controller_.recordReward(&rewards_);    // R
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] record reward for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
+
+      if(stabMode_ && timer_ % stabCubeSteps_ == 0){reset_cube();}
 
       if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
       return rewards_.sum();
     }
 
-    void observe(Eigen::Ref<EigenVec> ob,Eigen::Ref<EigenVec> opponentOb) {
+    void observe(Eigen::Ref<EigenVec> ob) {
       auto curTime = std::chrono::high_resolution_clock::now();
 
-      controller_.updateObservation(&world_); // (special function for cube) (NOT INLCUDED IN RAISIMGYMTORCH)
-      opponentController_.updateObservation(&world_);
+      // controller_.updateObservationCube(&world_); // (special function for cube) (NOT INLCUDED IN RAISIMGYMTORCH)
+      controller_.updateObservation(&world_);
       if(visualizable_ && TIME_VERBOSE){std::cout << "[OBS] observing for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
 
       ob = controller_.getObservation().cast<float>();
-      opponentOb = opponentController_.getObservation().cast<float>();
       if(visualizable_ && TIME_VERBOSE){std::cout << "[OBS] casting observation : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
     }
     // function to see if player died (modified from [for_test])
-    bool player_die(const std::string &name) {
-      auto anymal = reinterpret_cast<raisim::ArticulatedSystem *>(world_.getObject(name));
+    bool player_die() {
+      auto anymal = reinterpret_cast<raisim::ArticulatedSystem *>(world_.getObject(PLAYER_NAME));
       /// base contact with ground
       for(auto& contact: anymal->getContacts()) {
         if(contact.getPairObjectIndex() == world_.getObject("ground")->getIndexInWorld() &&
@@ -168,29 +199,40 @@ namespace raisim {
       return false;
     }
 
-    bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
-      auto died = player_die(PLAYER_NAME);
-      auto opponentDied = player_die("OPPONENT");
+    /// function to see if the cube died
+    bool cube_die() {
+      /// get out of the cage
+      Eigen::Vector3d gc;
+      gc = cube_->getPosition();
+      if (gc.head(2).norm() > 3) { // coordinate larger than 3
+        return true;
+      }
+      return false;
+    }
 
-      if (died && opponentDied) {
+    bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
+
+      if (player_die() && cube_die()) {
         winStreak_ = 0;
         termialReward = terminalRewardDraw_;
         return true;
       }
 
       if (timer_ > 10 * 100) {
-        winStreak_ = 0;
+        if(stabMode_){winStreak_ = 1;} // to prevent resetting robot on timeout
+        else{winStreak_ = 0;}
         termialReward = terminalRewardDraw_;
         return true;
       }
 
-      if (!died && opponentDied) {
+      if (!player_die() && cube_die()) {
         winStreak_ += 1;
-        termialReward = terminalRewardWin_;
+        if(stabMode_){ termialReward = terminalRewardWin_*stabWinDecay_;} // less reward for winning (one win and death results in negative net reward)
+        else{termialReward = terminalRewardWin_;}
         return true;
       }
 
-      if (died && !opponentDied) {
+      if (player_die() && !cube_die()) {
         winStreak_ = 0;
         termialReward = terminalRewardLose_;
         return true;
@@ -200,11 +242,10 @@ namespace raisim {
 
     void curriculumUpdate() {
       if(winStreak_ >= currWinStreak_){
-        // cubeMass_ += currMassIncr_;
-        // cube_->setMass(cubeMass_);
-        // do curricular shit here
+        cubeMass_ += currMassIncr_;
+        cube_->setMass(cubeMass_);
         winStreak_ = 0;
-        // if(visualizable_){std::cout << "Visualized ENV cube upgraded to: " << cubeMass_ << "KG" << std::endl;}
+        if(visualizable_){std::cout << "Visualized ENV cube upgraded to: " << cubeMass_ << "KG" << std::endl;}
       }
     };
 
@@ -216,24 +257,11 @@ namespace raisim {
       simulation_dt_ = dt;
       world_.setTimeStep(dt);
     }
-
     void setControlTimeStep(double dt) { control_dt_ = dt; }
 
-    int getObDim() { return controller_.getObDim(); } // left for back-compat
+    int getObDim() { return controller_.getObDim(); }
 
     int getActionDim() { return controller_.getActionDim(); }
-
-    Eigen::Array2i getObDims(){
-      Eigen::Array2i dims;
-      dims << controller_.getObDim(),opponentController_.getObDim();
-      return dims;
-    }
-
-    Eigen::Array2i getActionDims(){
-      Eigen::Array2i dims;
-      dims << controller_.getActionDim(),opponentController_.getActionDim();
-      return dims;
-    }
 
     double getControlTimeStep() { return control_dt_; }
 
@@ -269,16 +297,18 @@ namespace raisim {
     int currWinStreak_;
     double currMassIncr_;
 
+    bool stabMode_;
+    int stabCubeSteps_;
+    float stabWinDecay_;
+
     float terminalRewardWin_ ;
     float terminalRewardLose_;
     float terminalRewardDraw_;
-
     TRAINING_CONTROLLER controller_;
-    TRAINING_CONTROLLER opponentController_;
+    raisim::Box* cube_;
 
     raisim::World world_;
     raisim::ArticulatedSystem* robot_;
-    raisim::ArticulatedSystem* opponent_;
 
     raisim::Reward rewards_;
     double simulation_dt_ = 0.001;

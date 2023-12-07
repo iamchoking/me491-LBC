@@ -20,10 +20,15 @@ namespace raisim {
 
     explicit VectorizedEnvironment(std::string resourceDir, std::string cfg, bool normalizeObservation=true)
       : resourceDir_(resourceDir), cfgString_(cfg), normalizeObservation_(normalizeObservation) {
+
+      // std::cout << "VectorizedEnv L23" << std::endl;
+
       Yaml::Parse(cfg_, cfg);
 
       if(&cfg_["render"])
         render_ = cfg_["render"].template As<bool>();
+      // std::cout << "VectorizedEnv L30" << std::endl;
+
       init();
     }
 
@@ -36,9 +41,14 @@ namespace raisim {
     const std::string& getCfgString() const { return cfgString_; }
 
     void init() {
+
+      // std::cout << "VectorizedEnv L45" << std::endl;
+
       THREAD_COUNT = cfg_["num_threads"].template As<int>();
       omp_set_num_threads(THREAD_COUNT);
       num_envs_ = cfg_["num_envs"].template As<int>();
+
+      // std::cout << "VectorizedEnv L51" << std::endl;
 
       environments_.reserve(num_envs_);
       rewardInformation_.reserve(num_envs_);
@@ -49,11 +59,17 @@ namespace raisim {
         rewardInformation_.push_back(environments_.back()->getRewards().getStdMap());
       }
 
+      // std::cout << "VectorizedEnv L62" << std::endl;
+
+
       for (int i = 0; i < num_envs_; i++) {
         // only the first environment is visualized
         environments_[i]->init();
         environments_[i]->reset();
       }
+
+      // std::cout << "VectorizedEnv L71" << std::endl;
+
 
       obDim_ = environments_[0]->getObDims()(0); //(presumably) same input dims for player and opponent
       opponentObDim_ = environments_[0]->getObDims()(1); //(presumably) same input dims for player and opponent
@@ -63,7 +79,8 @@ namespace raisim {
 
       RSFATAL_IF(obDim_ == 0 || actionDim_ == 0, "Observation/Action dimension must be defined in the constructor of each environment!")
 
-      /// ob scaling
+      // std::cout << "VectorizedEnv L82" << std::endl;
+
       if (normalizeObservation_) {
         obMean_.setZero(obDim_);
         obVar_.setOnes(obDim_);
@@ -81,6 +98,9 @@ namespace raisim {
         opponentEpsilon_.setZero(opponentObDim_);
         opponentEpsilon_.setConstant(1e-8);
       }
+
+      // std::cout << "VectorizedEnv L102" << std::endl;
+
     }
 
     // resets all environments and returns observation
@@ -118,7 +138,7 @@ namespace raisim {
       opponentMean = opponentObMean_; opponentVar = opponentObVar_; opponentObCount_ = opponentCount;
     }
 
-    void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, Eigen::Ref<EigenVec> &opponentMean,float &count, Eigen::Ref<EigenVec> &opponentVar,float opponentCount) {
+    void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count,Eigen::Ref<EigenVec> &opponentMean, Eigen::Ref<EigenVec> &opponentVar,float opponentCount) {
       obMean_ = mean; obVar_ = var; obCount_ = count;
       opponentObMean_ = mean; opponentObVar_ = opponentVar; opponentObCount_ = opponentCount;
     }

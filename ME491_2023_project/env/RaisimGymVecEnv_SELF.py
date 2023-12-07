@@ -13,9 +13,11 @@ class RaisimGymVecEnv:
     def __init__(self, impl, normalize_ob=True, seed=0, clip_obs=10.):
         if platform.system() == "Darwin":
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
         self.normalize_ob = normalize_ob
         self.clip_obs = clip_obs
         self.wrapper = impl
+
 
         self.num_obs = self.wrapper.getObDims()[0]
         self.num_acts = self.wrapper.getActionDims()[0]
@@ -27,11 +29,15 @@ class RaisimGymVecEnv:
         self._opp_observation = np.zeros([self.num_envs, self.opp_num_obs], dtype=np.float32)
         self.opp_actions = np.zeros([self.num_envs, self.opp_num_acts], dtype=np.float32)
 
+
+
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
+
+
 
         # /// Scaling
         self.count = 0.0
@@ -42,6 +48,7 @@ class RaisimGymVecEnv:
         self.opp_mean = np.zeros(self.opp_num_obs, dtype=np.float32)
         self.opp_mean = np.zeros(self.opp_num_obs, dtype=np.float32)
         self.opp_var  = np.zeros(self.num_obs,     dtype=np.float32)
+
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -92,7 +99,7 @@ class RaisimGymVecEnv:
                 opp_count_file.close()
             except:
                 print("[ENV-LOAD] Failed to Retrieve [count] for <"+dir_name+">. using supplied value instead: "+str(opp_count))
-                self.count = opp_count
+                self.opp_count = opp_count
 
             self.opp_mean = np.loadtxt(opp_mean_file_name, dtype=np.float32)
             self.opp_var = np.loadtxt(opp_var_file_name, dtype=np.float32)

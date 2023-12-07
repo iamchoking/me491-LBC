@@ -23,7 +23,7 @@
 #include <chrono>
 
 bool TIME_VERBOSE = false;
-bool STABLILTY_TRAIN = false; // this mode doesn't teloport the robot anymore when winning
+bool STABLILTY_TRAIN = true; // this mode doesn't teloport the robot anymore when winning
 
 namespace raisim {
 

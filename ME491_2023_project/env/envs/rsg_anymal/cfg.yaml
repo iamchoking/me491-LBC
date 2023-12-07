@@ -1,6 +1,9 @@
 seed: 1
 record_video: yes
 
+training:
+  lr_start: 0 # 0 for no change
+
 environment:
   render: True
 #  for training
@@ -63,9 +66,13 @@ environment:
   reward_lose: -10
   reward_draw: -5
 
-  curriculum_mass_start: 30
+  curriculum_mass_start: 3
   curriculum_win_streak: 10
   curriculum_mass_incr: 0.1
+
+  stability_mode: True
+  stability_cube_teleport: -1
+  stability_win_decay: 1.1
 
 evaluation:
   iteration: 10000 #Write your final submit policy iteration. ex) if you submit full_10000.pt

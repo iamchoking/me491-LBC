@@ -33,14 +33,16 @@ namespace raisim {
     explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
       visualizable_(visualizable) {
       /// add player
-      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
+      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_red.urdf");
       robot_->setName(PLAYER_NAME);
+      controller_.setPlayerNum(0);
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// add opponent (with same controller)
-      opponent_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_red.urdf");
+      opponent_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
       opponent_->setName("OPPONENT");
+      opponentController_.setPlayerNum(1);
       opponentController_.setName("OPPONENT");
       opponent_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
@@ -51,6 +53,8 @@ namespace raisim {
       ground->setName("ground");
 
       controller_.create(&world_);
+      opponentController_.create(&world_);
+
       READ_YAML(double, simulation_dt_, cfg["simulation_dt"])
       READ_YAML(double, control_dt_, cfg["control_dt"])
 
@@ -84,8 +88,13 @@ namespace raisim {
 
     void reset() {
       auto theta = uniDist_(gen_) * 2 * M_PI;
+
+      // std::cout << "Env L87" << std::endl;
       controller_.reset(&world_, theta);
+      // std::cout << "Env L90" << std::endl;
+
       opponentController_.reset(&world_,theta);
+      // std::cout << "Env L93" << std::endl;
 
       timer_ = 0;
     }
