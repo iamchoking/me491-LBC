@@ -129,7 +129,8 @@ namespace raisim {
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] integrate and publish : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
-      controller_.updateObservationCube(&world_); // S' (special function for cube)
+      // controller_.updateObservationCube(&world_); // S' (special function for cube)
+      controller_.updateObservation(&world_);
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] update observation for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
@@ -144,7 +145,8 @@ namespace raisim {
     void observe(Eigen::Ref<EigenVec> ob) {
       auto curTime = std::chrono::high_resolution_clock::now();
 
-      controller_.updateObservationCube(&world_); // (special function for cube) (NOT INLCUDED IN RAISIMGYMTORCH)
+      // controller_.updateObservationCube(&world_); // (special function for cube) (NOT INLCUDED IN RAISIMGYMTORCH)
+      controller_.updateObservation(&world_);
       if(visualizable_ && TIME_VERBOSE){std::cout << "[OBS] observing for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 

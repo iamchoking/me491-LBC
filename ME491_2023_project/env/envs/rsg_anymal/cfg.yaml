@@ -6,7 +6,7 @@ environment:
 #  for training
   num_envs: 50
   eval_every_n: 30
-  max_time: 10.02 # max_time larger than 10 is required to observe draws.
+  max_time: 10.01 # max_time larger than 10 is required to observe draws.
 
 #  for visualizing
 #  num_envs: 1
@@ -20,9 +20,9 @@ environment:
 
   reward:
     class:
-      coeff: 0.05   # !time and class must have exact opposite coeffs!
+      coeff: 0.1   # !time and class must have exact opposite coeffs!
     time:
-      coeff: -0.05  # !time and class must have exact opposite coeffs!
+      coeff: -0.1  # !time and class must have exact opposite coeffs!
 
 #    [STD]
 ##    PENALIZE
@@ -33,7 +33,7 @@ environment:
     tilt:
       coeff: -0.1
     edge:
-      coeff: -0.05
+      coeff: -0.03
 
 #    PROMOTE
     face:
@@ -63,7 +63,7 @@ environment:
   reward_lose: -10
   reward_draw: -5
 
-  curriculum_mass_start: 5
+  curriculum_mass_start: 30
   curriculum_win_streak: 10
   curriculum_mass_incr: 0.1
 

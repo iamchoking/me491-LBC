@@ -112,7 +112,7 @@ for update in range(1000000):
             with torch.no_grad():
                 frame_start = time.time()
                 obs = env.observe(False)
-                # print(obs[0]) CHECK OBS HERE
+                # print(obs[0]) # CHECK OBS HERE
                 action = loaded_graph.architecture(torch.from_numpy(obs).cpu())
                 reward, dones = env.step(action.cpu().detach().numpy())
                 reward_analyzer.add_reward_info(env.get_reward_info())

@@ -16,32 +16,18 @@ class RaisimGymVecEnv:
         self.normalize_ob = normalize_ob
         self.clip_obs = clip_obs
         self.wrapper = impl
-
-        self.num_obs = self.wrapper.getObDims()[0]
-        self.num_acts = self.wrapper.getActionDims()[0]
+        self.num_obs = self.wrapper.getObDim()
+        self.num_acts = self.wrapper.getActionDim()
         self._observation = np.zeros([self.num_envs, self.num_obs], dtype=np.float32)
         self.actions = np.zeros([self.num_envs, self.num_acts], dtype=np.float32)
-
-        self.opp_num_obs = self.wrapper.getObDims()[1]
-        self.opp_num_acts= self.wrapper.getActionDims()[1]
-        self._opp_observation = np.zeros([self.num_envs, self.opp_num_obs], dtype=np.float32)
-        self.opp_actions = np.zeros([self.num_envs, self.opp_num_acts], dtype=np.float32)
-
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
-
-        # /// Scaling
         self.count = 0.0
         self.mean = np.zeros(self.num_obs, dtype=np.float32)
         self.var = np.zeros(self.num_obs, dtype=np.float32)
-
-        self.opp_count = 0.0
-        self.opp_mean = np.zeros(self.opp_num_obs, dtype=np.float32)
-        self.opp_mean = np.zeros(self.opp_num_obs, dtype=np.float32)
-        self.opp_var  = np.zeros(self.num_obs,     dtype=np.float32)
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -58,11 +44,11 @@ class RaisimGymVecEnv:
     def stop_video_recording(self):
         self.wrapper.stopRecordingVideo()
 
-    def step(self, action, opp_action):
-        self.wrapper.step(action, opp_action, self._reward, self._done)
+    def step(self, action):
+        self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
 
-    def load_scaling(self, dir_name, iteration, count=1e5, opp_dir_name="", opp_iteration=0, opp_count=1e5):
+    def load_scaling(self, dir_name, iteration, count=1e5):
         mean_file_name = dir_name + "/mean" + str(iteration) + ".csv"
         var_file_name = dir_name + "/var" + str(iteration) + ".csv"
         self.count = count

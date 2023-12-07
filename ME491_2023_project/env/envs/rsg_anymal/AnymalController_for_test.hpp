@@ -73,7 +73,7 @@ class AnymalController_for_test {
     /// action scaling
     pTarget12_ = action.cast<double>();
     pTarget12_ = pTarget12_.cwiseProduct(actionStd_);
-    pTarget12_.setZero();
+    pTarget12_.setZero(); // actual dummy....
     pTarget12_ += actionMean_;
     pTarget_.tail(nJoints_) = pTarget12_;
     anymal_->setPdTarget(pTarget_, vTarget_);

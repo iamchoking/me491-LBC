@@ -55,12 +55,8 @@ class VectorizedEnvironment {
       environments_[i]->reset();
     }
 
-    obDim_ = environments_[0]->getObDims()(0); //(presumably) same input dims for player and opponent
-    opponentObDim_ = environments_[0]->getObDims()(1); //(presumably) same input dims for player and opponent
-
-    actionDim_ = environments_[0]->getActionDims()(0);
-    opponentActionDim_ = environments_[0]->getActionDims()(1);
-
+    obDim_ = environments_[0]->getObDim();
+    actionDim_ = environments_[0]->getActionDim();
     RSFATAL_IF(obDim_ == 0 || actionDim_ == 0, "Observation/Action dimension must be defined in the constructor of each environment!")
 
     /// ob scaling
@@ -70,16 +66,8 @@ class VectorizedEnvironment {
       recentMean_.setZero(obDim_);
       recentVar_.setZero(obDim_);
       delta_.setZero(obDim_);
-      epsilon_.setZero(obDim_);
-      epsilon_.setConstant(1e-8);
-
-      opponentObMean_.setZero(opponentObDim_);
-      opponentObVar_.setOnes(opponentObDim_);
-      opponentRecentMean_.setZero(opponentObDim_);
-      opponentRecentVar_.setZero(opponentObDim_);
-      opponentDelta_.setZero(opponentObDim_);
-      opponentEpsilon_.setZero(opponentObDim_);
-      opponentEpsilon_.setConstant(1e-8);
+      epsilon.setZero(obDim_);
+      epsilon.setConstant(1e-8);
     }
   }
 
@@ -89,39 +77,32 @@ class VectorizedEnvironment {
       env->reset();
   }
 
-  void observe(Eigen::Ref<EigenRowMajorMat> &ob, Eigen::Ref<EigenRowMajorMat> &opponentOb, bool updateStatistics) {
+  void observe(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)
-      environments_[i]->observe(ob.row(i),opponentOb.row(i));
+      environments_[i]->observe(ob.row(i));
 
     if (normalizeObservation_)
-      updateObservationStatisticsAndNormalize(ob,opponentOb, updateStatistics);
+      updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
 
   void step(Eigen::Ref<EigenRowMajorMat> &action,
-            Eigen::Ref<EigenRowMajorMat> &opponentAction,
             Eigen::Ref<EigenVec> &reward,
             Eigen::Ref<EigenBoolVec> &done) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)
-      perAgentStep(i, action, opponentAction, reward, done);
+      perAgentStep(i, action, reward, done);
   }
 
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }
   void stopRecordingVideo() { if(render_) environments_[0]->stopRecordingVideo(); }
-
-  void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count, Eigen::Ref<EigenVec> &opponentMean, Eigen::Ref<EigenVec> &opponentVar, float &opponentCount) {
-    mean = obMean_; var = obVar_; count = obCount_;
-    opponentMean = opponentObMean_; opponentVar = opponentObVar_; opponentObCount_ = opponentCount;
-  }
-
-  void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, Eigen::Ref<EigenVec> &opponentMean,float &count, Eigen::Ref<EigenVec> &opponentVar,float opponentCount) {
-    obMean_ = mean; obVar_ = var; obCount_ = count;
-    opponentObMean_ = mean; opponentObVar_ = opponentVar; opponentObCount_ = opponentCount;
-  }
+  void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count) {
+    mean = obMean_; var = obVar_; count = obCount_; }
+  void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float count) {
+    obMean_ = mean; obVar_ = var; obCount_ = count; }
 
   void setSeed(int seed) {
     int seed_inc = seed;
@@ -155,18 +136,6 @@ class VectorizedEnvironment {
 
   int getObDim() { return obDim_; }
   int getActionDim() { return actionDim_; }
-
-  Eigen::Array2i getObDims(){
-    Eigen::Array2i dims;
-    dims << obDim_,opponentObDim_;
-    return dims;
-  }
-  Eigen::Array2i getActionDims(){
-    Eigen::Array2i dims;
-    dims << actionDim_,opponentActionDim_;
-    return dims;
-  }
-
   int getNumOfEnvs() { return num_envs_; }
 
   ////// optional methods //////
@@ -178,9 +147,8 @@ class VectorizedEnvironment {
   const std::vector<std::map<std::string, float>>& getRewardInfo() { return rewardInformation_; }
 
  private:
-  void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,Eigen::Ref<EigenRowMajorMat> opponentOb,bool updateStatistics) {
+  void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {
     if (updateStatistics) {
-      ///PLAYER
       recentMean_ = ob.colwise().mean();
       recentVar_ = (ob.rowwise() - recentMean_.transpose()).colwise().squaredNorm() / num_envs_;
 
@@ -192,44 +160,19 @@ class VectorizedEnvironment {
 
       obMean_ = obMean_ * (obCount_ / totCount) + recentMean_ * (num_envs_ / totCount);
       obVar_ = (obVar_ * obCount_ + recentVar_ * num_envs_ + delta_ * (obCount_ * num_envs_ / totCount)) / (totCount);
-
       obCount_ = totCount;
-
-      ///OPPONENT
-      opponentRecentMean_ = opponentOb.colwise().mean();
-      opponentRecentVar_ = (opponentOb.rowwise() - opponentRecentMean_.transpose()).colwise().squaredNorm() / num_envs_;
-
-      opponentDelta_ = opponentObMean_ - opponentRecentMean_;
-      for(int i=0; i<opponentObDim_; i++)
-        opponentDelta_[i] = opponentDelta_[i]*opponentDelta_[i];
-
-      float opponentTotCount = opponentObCount_ + num_envs_;
-
-      opponentObMean_ = opponentObMean_ * (opponentObCount_ / opponentTotCount) + opponentRecentMean_ * (num_envs_ / opponentTotCount);
-      opponentObVar_ = (opponentObVar_ * opponentObCount_ + opponentRecentVar_ * num_envs_ + opponentDelta_ * (opponentObCount_ * num_envs_ / opponentTotCount)) / (opponentTotCount);
-
-      opponentObCount_ = opponentTotCount;
-
     }
 
 #pragma omp parallel for schedule(auto)
-    for(int i=0; i<num_envs_; i++) {
-      ///PLAYER
-      ob.row(i) = (ob.row(i) - obMean_.transpose()).template cwiseQuotient<>(
-        (obVar_ + epsilon_).cwiseSqrt().transpose());
-
-      ///OPPONENT
-      opponentOb.row(i) = (opponentOb.row(i) - opponentObMean_.transpose()).template cwiseQuotient<>(
-        (opponentObVar_ + opponentEpsilon_).cwiseSqrt().transpose());
-    }
+    for(int i=0; i<num_envs_; i++)
+      ob.row(i) = (ob.row(i) - obMean_.transpose()).template cwiseQuotient<>((obVar_ + epsilon).cwiseSqrt().transpose());
   }
 
   inline void perAgentStep(int agentId,
                            Eigen::Ref<EigenRowMajorMat> &action,
-                           Eigen::Ref<EigenRowMajorMat> &opponentAction,
                            Eigen::Ref<EigenVec> &reward,
                            Eigen::Ref<EigenBoolVec> &done) {
-    reward[agentId] = environments_[agentId]->step(action.row(agentId),opponentAction.row(agentId));
+    reward[agentId] = environments_[agentId]->step(action.row(agentId));
     rewardInformation_[agentId] = environments_[agentId]->getRewards().getStdMap();
 
     float terminalReward = 0;
@@ -246,8 +189,6 @@ class VectorizedEnvironment {
 
   int num_envs_ = 1;
   int obDim_ = 0, actionDim_ = 0;
-  int opponentObDim_ = 0, opponentActionDim_ = 0;
-
   bool recordVideo_=false, render_=false;
   std::string resourceDir_;
   Yaml::Node cfg_;
@@ -257,18 +198,9 @@ class VectorizedEnvironment {
   bool normalizeObservation_ = true;
   EigenVec obMean_;
   EigenVec obVar_;
-
-  EigenVec opponentObMean_;
-  EigenVec opponentObVar_;
-
   float obCount_ = 1e-4;
-  float opponentObCount_ = 1e-4;
-
   EigenVec recentMean_, recentVar_, delta_;
-  EigenVec opponentRecentMean_, opponentRecentVar_, opponentDelta_;
-
-  EigenVec epsilon_;
-  EigenVec opponentEpsilon_;
+  EigenVec epsilon;
 };
 
 

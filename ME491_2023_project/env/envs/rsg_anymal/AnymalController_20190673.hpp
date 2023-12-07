@@ -42,7 +42,7 @@ class AnymalController_20190673 {
     /// set pd gains
     Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
     jointPgain.setZero();
-    jointPgain.tail(nJoints_).setConstant(100.0);
+    jointPgain.tail(nJoints_).setConstant(50.0);
     jointDgain.setZero();
     jointDgain.tail(nJoints_).setConstant(0.2);
     anymal_->setPdGains(jointPgain, jointDgain);
@@ -51,7 +51,7 @@ class AnymalController_20190673 {
     /// MUST BE DONE FOR ALL ENVIRONMENTS
     obDim_ = 64; // always padded to 64 (for compatibility)
     // ACTUAL DIMS: 42
-    obPaddingDim_ = 64-42;
+    obPaddingDim_ = 64-44;
     obPadding_.setZero(obPaddingDim_);
 
     actionDim_ = nJoints_;
@@ -116,49 +116,15 @@ class AnymalController_20190673 {
     quat[2] = gc_[5];
     quat[3] = gc_[6];
     raisim::quatToRotMat(quat, rot_);
-    bodyLinearVel_  = rot_.e().transpose() * gv_.segment(0, 3);
-    bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    /// if you want use opponent robot`s state, use like below code
-    // auto opponent = reinterpret_cast<raisim::ArticulatedSystem *>(world->getObject(opponentName_));
-    // Eigen::VectorXd opponentGc(gcDim_);
-    // Eigen::VectorXd opponentGv(gvDim_);
-    // opponent->getState(opponentGc, opponentGv);
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-
-    obDouble_ << gc_[2], /// body pose
-        rot_.e().row(2).transpose(), /// body orientation
-        gc_.tail(12), /// joint angles
-        bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-        gv_.tail(12); /// joint velocity
-    // obFloat_ << gc_[2], /// body pose
-    //     rot_.e().row(2).transpose(), /// body orientation
-    //     gc_.tail(12), /// joint angles
-    //     bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-    //     gv_.tail(12); /// joint velocity
-
-  }
-
-
-  inline void updateObservationCube(raisim::World *world) { /// (!!!) getting observation
-    anymal_->getState(gc_, gv_);
-    raisim::Vec<4> quat;
-    quat[0] = gc_[3];
-    quat[1] = gc_[4];
-    quat[2] = gc_[5];
-    quat[3] = gc_[6];
-    raisim::quatToRotMat(quat, rot_);
     bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     /// if you want use opponent cube`s state, use like below code
-    auto opponent = reinterpret_cast<raisim::SingleBodyObject *>(world->getObject(opponentName_));
 
-    opponent->getPosition(opponentPos_);
-    opponent->getRotationMatrix(opponentRot_);
-    opponent->getLinearVelocity(opponentLinearVel_);
+    world->getObject(opponentObjectIdx_)->getPosition(0,opponentPos_);
+    world->getObject(opponentObjectIdx_)->getOrientation(0,opponentRot_);
+    world->getObject(opponentObjectIdx_)->getVelocity(0,opponentLinearVel_);
     ///////////////////////////////////////////////////////////////////////////////////////////////
 
     // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
@@ -166,8 +132,10 @@ class AnymalController_20190673 {
     anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
 
     Eigen::Vector3d relativeVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
+
     auto x_b = rot_.e().coeff(0,0);
     auto y_b = rot_.e().coeff(0,1);
+
     auto x_o = opponentRot_.e().coeff(0,0);
     auto y_o = opponentRot_.e().coeff(0,1);
 
@@ -177,7 +145,7 @@ class AnymalController_20190673 {
     // std::cout << obPadding_ << "garbled?" <<std::endl ;
 
     obDouble_ <<                         /// Name                             Dims
-       gc_[2]                            /// body height                      1
+              gc_.head(3)                    /// body position                     3
       ,rot_.e().row(2).transpose()     /// body orientation                 3
       ,gc_.tail(12)                   /// joint angles                     12
       ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
@@ -185,9 +153,57 @@ class AnymalController_20190673 {
       ,relativePos.e(),relativeVel       /// relative position and velocity   6
       ,headingAngle                      /// heading angle for players        1
       ,gc_.head(2).norm()             /// center distance                  1
-      ,obPadding_                        /// padding                          (12)
-      ;                                  /// (total+padding)                  42+12
+      ,obPadding_                        /// padding                          (10)
+      ;                                  /// (total+padding)                  44+10
   }
+
+  // inline void updateObservationCube(raisim::World *world) { /// (!!!) getting observation
+  //   anymal_->getState(gc_, gv_);
+  //   raisim::Vec<4> quat;
+  //   quat[0] = gc_[3];
+  //   quat[1] = gc_[4];
+  //   quat[2] = gc_[5];
+  //   quat[3] = gc_[6];
+  //   raisim::quatToRotMat(quat, rot_);
+  //   bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
+  //   bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
+  //
+  //   ///////////////////////////////////////////////////////////////////////////////////////////////
+  //   /// if you want use opponent cube`s state, use like below code
+  //   auto opponent = reinterpret_cast<raisim::SingleBodyObject *>(world->getObject(opponentName_));
+  //
+  //   opponent->getPosition(opponentPos_);
+  //   opponent->getRotationMatrix(opponentRot_);
+  //   opponent->getLinearVelocity(opponentLinearVel_);
+  //   ///////////////////////////////////////////////////////////////////////////////////////////////
+  //
+  //   // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
+  //   Vec<3> relativePos;
+  //   anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
+  //
+  //   Eigen::Vector3d relativeVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
+  //   auto x_b = rot_.e().coeff(0,0);
+  //   auto y_b = rot_.e().coeff(0,1);
+  //   auto x_o = opponentRot_.e().coeff(0,0);
+  //   auto y_o = opponentRot_.e().coeff(0,1);
+  //
+  //   auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
+  //
+  //   // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
+  //   // std::cout << obPadding_ << "garbled?" <<std::endl ;
+  //
+  //   obDouble_ <<                         /// Name                             Dims
+  //      gc_.head(3)                    /// body position                     3
+  //     ,rot_.e().row(2).transpose()     /// body orientation                 3
+  //     ,gc_.tail(12)                   /// joint angles                     12
+  //     ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
+  //     ,gv_.tail(12)                   /// joint velocity                   12
+  //     ,relativePos.e(),relativeVel       /// relative position and velocity   6
+  //     ,headingAngle                      /// heading angle for players        1
+  //     ,gc_.head(2).norm()             /// center distance                  1
+  //     ,obPadding_                        /// padding                          (10)
+  //     ;                                  /// (total+padding)                  44+10
+  // }
 
   inline void recordReward(Reward *rewards) { ///(!!!) Setting rewards!
     /// (skeleton) reward for forward running
@@ -257,9 +273,9 @@ class AnymalController_20190673 {
     Eigen::Vector3d eRelPos = relPos.e();
     eRelPos.normalize();
     // reward velocity facing toward opponent,
-    float ramPoint = std::min(3.0f,std::max(-3.0f,(float(eRelPos.dot(rot_.e().transpose() * gv_.segment(0, 3)))))) / 6.0f + 0.5f; //scaled to 0~1
+    float ramPoint = std::min(3.0f,std::max(-3.0f,(float(eRelPos.dot(rot_.e().transpose() * gv_.segment(0, 3)))))) / 3.0f ; //scaled to -1~1
     if(opponentContact){
-      ramPoint+=ramPoint*float(1+opponentMass/anymal_->getMass(0))+1; // when in contact, get full mark + scaled for mass (proportional to resulting momentum)
+      ramPoint+=ramPoint*float(1+opponentMass/anymal_->getMass(0))+0.3f; // when in contact, give it bonus + scaled for mass (proportional to resulting momentum)
     } // when in contact, give full mark plus extra (always promote contact)
 
     rewards->record("ram",ramPoint);

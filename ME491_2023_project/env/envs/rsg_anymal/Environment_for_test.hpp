@@ -80,7 +80,7 @@ class ENVIRONMENT_for_test {
   void step(const Eigen::Ref<EigenVec> &action) {
     timer_ += 1;
     controller_.advance(&world_, action);
-    dummyController_.advance(&world_, action);
+    dummyController_.advance(&world_, action); //advances on same action...?
     for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
       if (server_) server_->lockVisualizationServerMutex();
       world_.integrate();
