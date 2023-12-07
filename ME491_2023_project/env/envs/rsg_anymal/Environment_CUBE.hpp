@@ -23,6 +23,7 @@
 #include <chrono>
 
 bool TIME_VERBOSE = false;
+bool STABLILTY_TRAIN = false; // this mode doesn't teloport the robot anymore when winning
 
 namespace raisim {
 
@@ -33,14 +34,14 @@ namespace raisim {
     explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg, bool visualizable) :
       visualizable_(visualizable) {
       /// add player
-      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_blue.urdf");
+      robot_ = world_.addArticulatedSystem(resourceDir + "/anymal/urdf/anymal_red.urdf"); //YOU  are always red!
       robot_->setName(PLAYER_NAME);
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// add opponent (with same controller)
       cubeMass_ = 1.0;
-      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,cubeMass_);
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*1.3+0.2,cubeMass_);
       cube_->setName("OPPONENT");
       controller_.setOpponentName("OPPONENT");
 
@@ -82,8 +83,15 @@ namespace raisim {
 
     void reset() {
       auto theta = uniDist_(gen_) * 2 * M_PI;
-      controller_.reset(&world_, theta);
 
+      if(STABLILTY_TRAIN && winStreak_ > 0){}
+      else{controller_.reset(&world_, theta);}
+      reset_cube();
+
+      timer_ = 0;
+    }
+
+    void reset_cube(){
       /// put back cube (random position)
       Eigen::Vector3d cubePos;
       Vec<3> robotPos;
@@ -109,7 +117,6 @@ namespace raisim {
       zeroVel.setZero();
       cube_->setVelocity(zeroVel,zeroVel);
 
-      timer_ = 0;
     }
 
     float step(const Eigen::Ref<EigenVec> &action) {
@@ -197,7 +204,8 @@ namespace raisim {
       }
 
       if (timer_ > 10 * 100) {
-        winStreak_ = 0;
+        if(STABLILTY_TRAIN){winStreak_ = 1;} // to prevent resetting robot on timeout
+        else{winStreak_ = 0;}
         termialReward = terminalRewardDraw_;
         return true;
       }

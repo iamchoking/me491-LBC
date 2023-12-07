@@ -90,15 +90,23 @@ class AnymalController_20190673 {
 
   inline bool reset(raisim::World *world, double theta) { //TODO change the reset back to what it was
     if (playerNum_ == 0) {
+      // std::cout << "Controller L93" << std::endl;
+
       gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;                 //position
       gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2); //rotation
+      // std::cout << "Controller L97" << std::endl;
 
       // gc_init_.head(3) << 2.5 * std::cos(theta), 2.5 * std::sin(theta), 0.5;                 //position
       // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
     }
     else {
+      // std::cout << "Controller L103" << std::endl;
+
       gc_init_.head(3) << 1.5 * std::cos(theta + M_PI), 1.5 * std::sin(theta + M_PI), 0.5;
+      // std::cout << "Controller L106" << std::endl;
+
       gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);
+      // std::cout << "Controller L109" << std::endl;
 
       // gc_init_.head(3) << 2.5 * std::cos(theta + M_PI), 2.5 * std::sin(theta + M_PI), 0.5;
       // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
