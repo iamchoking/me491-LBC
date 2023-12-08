@@ -108,6 +108,19 @@ namespace raisim {
         auto cage = server_->addVisualCylinder("cage", 3.0, 0.05);
         cage->setPosition(0,0,0);
       }
+
+      metrics_["cube_weight"]      = 0.0;
+      metrics_["consecutive_wins"] = 0.0;
+      metrics_["win_interval"]    = 0.0;
+      metrics_["lose_interval"]   = 0.0;
+      metrics_["draw_interval"]   = 0.0;
+      metrics_["win_falldown_100"]     = 0.0;
+      metrics_["win_pushout_100"]      = 0.0;
+      metrics_["lose_falldown_100"]     = 0.0;
+      metrics_["lose_pushout_100"]      = 0.0;
+      metrics_["win_100"]          = 0.0;
+      metrics_["draw_100"]         = 0.0;
+      metrics_["lose_100"]         = 1.0;
     }
 
     void init() {}
@@ -236,6 +249,7 @@ namespace raisim {
       for(auto& contact: anymal->getContacts()) {
         if(contact.getPairObjectIndex() == world_.getObject("ground")->getIndexInWorld() &&
            contact.getlocalBodyIndex() == anymal->getBodyIdx("base")) {
+          terminalFactor_ = 1;
           return true; //player dies by "base" touching the ground
         }
       }
@@ -245,6 +259,7 @@ namespace raisim {
       gc.setZero(gcDim);
       gc = anymal->getGeneralizedCoordinate().e();
       if (gc.head(2).norm() > 3) { // norm of x,y larger than 3
+        terminalFactor_ = 2;
         return true;
       }
       return false;
@@ -256,33 +271,82 @@ namespace raisim {
       return cube_->getPosition().head(2).norm() > 3;
     }
 
+    void processWin(){
+      metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
+      timeLastWin_ = world_.getWorldTime();
+      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
+      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+      metrics_["consecutive_wins"] += 1.0;
+
+      if(terminalFactor_ == 1){
+        metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
+        metrics_["win_pushout_100"]  = metrics_["win_falldown_100"]*0.99+0.00;
+      }
+      else{
+        metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
+        metrics_["win_pushout_100"]  = metrics_["win_falldown_100"]*0.99+0.01;
+      }
+    }
+
+    void processLose(){
+      metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
+      timeLastLose_ = world_.getWorldTime();
+      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
+      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+      metrics_["consecutive_wins"] = 0.0;
+      if(terminalFactor_ == 1){
+        metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
+        metrics_["lose_pushout_100"]  = metrics_["lose_falldown_100"]*0.99+0.00;
+      }
+      else{
+        metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
+        metrics_["lose_pushout_100"]  = metrics_["lose_falldown_100"]*0.99+0.01;
+      }
+    }
+
+    void processDraw(){
+      metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
+      timeLastDraw_ = world_.getWorldTime();
+      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
+      metrics_["consecutive_wins"] = 0.0;
+    }
+
     bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
       auto died = player_die(PLAYER_NAME);
       bool opponentDied;
       if(trainingMode_ == 0){opponentDied = cube_die();}
       else{opponentDied = player_die("OPPONENT");}
 
-      if (died && opponentDied) {
+      if (died && opponentDied) { // draw (same-time)
         winStreak_ = 0;
         termialReward = terminalRewardDraw_;
+        processDraw();
         return true;
       }
 
-      if (timer_ > 10 * 100) {
+      if (timer_ > 10 * 100) { // draw (timeout)
+        terminalFactor_ = 0;
         winStreak_ = 0;
         termialReward = terminalRewardDraw_;
+        processDraw();
         return true;
       }
 
-      if (!died && opponentDied) {
+      if (!died && opponentDied) { // win
         winStreak_ += 1;
         termialReward = terminalRewardWin_;
+        processWin();
         return true;
       }
 
-      if (died && !opponentDied) {
+      if (died && !opponentDied) { // lose
         winStreak_ = 0;
         termialReward = terminalRewardLose_;
+        processLose();
         return true;
       }
       return false;
@@ -350,6 +414,12 @@ namespace raisim {
 
     raisim::Reward& getRewards() { return rewards_; }
 
+    std::map<std::string,double> getMetrics(){
+      // metrics to calculate
+      if(trainingMode_==0){metrics_["cube_weight"]=cubeMass_;}
+      return metrics_;
+    }
+
   private:
     int timer_ = 0;
     int winStreak_ = 0;
@@ -384,8 +454,17 @@ namespace raisim {
     raisim::Box* cube_;
 
     raisim::Reward rewards_;
+
     double simulation_dt_ = 0.001;
     double control_dt_ = 0.01;
+
+    std::map<std::string,double> metrics_;
+    unsigned long timerAbsolute;
+    double timeLastWin_  = 0;
+    double timeLastLose_ = 0;
+    double timeLastDraw_ = 0;
+    int terminalFactor_  = 0; // reason the game ended (0: timeout, 1: falldown, 2: pushout)
+
     std::unique_ptr<raisim::RaisimServer> server_;
     thread_local static std::uniform_real_distribution<double> uniDist_;
     thread_local static std::mt19937 gen_;

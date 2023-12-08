@@ -34,15 +34,15 @@ def tensorboard_launcher(directory_path, open_browser=True):
 
 def load_param(weight_path, env, actor, critic, optimizer, data_dir):
     if weight_path == "":
-        raise Exception("\n[HELPER] Can't find the pre-trained weight, please provide a pre-trained weight with --weight switch\n")
-    print("\n[HELPER] Retraining from the checkpoint:", weight_path+"\n")
+        print("[HELPER] Can't find the pre-trained weight, continuing with fresh model. (or, provide a pre-trained weight with --weight switch)")
+    print("[HELPER] Retraining from the checkpoint:", weight_path+"\n")
 
     iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
     weight_dir = weight_path.rsplit('/', 1)[0] + '/'
 
     mean_csv_path = weight_dir + 'mean' + iteration_number + '.csv'
     var_csv_path = weight_dir + 'var' + iteration_number + '.csv'
-    items_to_save = [weight_path, mean_csv_path, var_csv_path, weight_dir + "cfg.yaml", weight_dir + "Environment.hpp"]
+    items_to_save = [weight_path, mean_csv_path, var_csv_path, weight_dir + "cfg.yaml", weight_dir + "Environment.hpp", weight_dir + "AnymalController_20190673.hpp"]
 
     if items_to_save is not None:
         pretrained_data_dir = data_dir + '/pretrained_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1]
@@ -65,7 +65,7 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
     if opp_weight_path == "":
         raise Exception("\n[HELPER] Can't find the opponent weight, please provide a opponent weight with --oppweight switch\n")
     else:
-        print("\n[HELPER] Loading opponent from checkpoint:", opp_weight_path+"\n")
+        print("[HELPER] Loading opponent from checkpoint:", opp_weight_path+"\n")
         opp_iteration_number = opp_weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
         opp_weight_dir = opp_weight_path.rsplit('/', 1)[0] + '/'
 
@@ -75,19 +75,19 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
 
 
     if weight_path == "":
-        print("\n[HELPER] No Specified pre-trained weight for player. Proceeding with new network\n")
+        print("[HELPER] No Specified pre-trained weight for player. Proceeding with new network\n")
         iteration_number = 0
         weight_dir = ""
         items_to_save = None
     else:
-        print("\n[HELPER] Retraining from the checkpoint:", weight_path+"\n")
+        print("[HELPER] Retraining from the checkpoint:", weight_path+"\n")
         # BOOKMARK
         iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
         weight_dir = weight_path.rsplit('/', 1)[0] + '/'
 
         mean_csv_path = weight_dir + 'mean' + iteration_number + '.csv'
         var_csv_path = weight_dir + 'var' + iteration_number + '.csv'
-        items_to_save = [weight_path, mean_csv_path, var_csv_path, weight_dir + "cfg.yaml", weight_dir + "Environment.hpp"]
+        items_to_save = [weight_path, mean_csv_path, var_csv_path, weight_dir + "cfg.yaml", weight_dir + "Environment.hpp", weight_dir + "AnymalController_20190673.hpp"]
         checkpoint = torch.load(weight_path)
         actor.architecture.load_state_dict(checkpoint['actor_architecture_state_dict'])
         actor.distribution.load_state_dict(checkpoint['actor_distribution_state_dict'])

@@ -78,11 +78,13 @@ class RaisimGymVecEnv:
             count_file_name = dir_name + "/count"+str(iteration)
 
             try:
-                count_file = open(count_file_name,'r').read()
-                self.count = float(count_file.strip())
+                count_file = open(count_file_name,'r')
+                self.count = float(count_file.read().strip())
                 count_file.close()
+                print("[ENV-LOAD] Retrieved [count] from <"+count_file_name+">:"+str(self.count))
+
             except:
-                print("[ENV-LOAD] Failed to Retrieve [count] for <"+dir_name+">. using supplied value instead: "+str(count))
+                print("[ENV-LOAD] Failed to Retrieve [count] from <"+count_file_name+">. using supplied value instead: "+str(count))
                 self.count = count
 
             self.mean = np.loadtxt(mean_file_name, dtype=np.float32)
@@ -94,11 +96,13 @@ class RaisimGymVecEnv:
             opp_count_file_name = opp_dir_name + "/count" + str(opp_iteration)
 
             try:
-                opp_count_file = open(opp_count_file_name,'r').read()
-                self.opp_count = float(opp_count_file.strip())
+                opp_count_file = open(opp_count_file_name,'r')
+                self.opp_count = float(opp_count_file.read().strip())
                 opp_count_file.close()
+                print("[ENV-LOAD] Retrieved [opp_count] from <"+opp_count_file_name+">:"+str(self.opp_count))
+
             except:
-                print("[ENV-LOAD] Failed to Retrieve [count] for <"+dir_name+">. using supplied value instead: "+str(opp_count))
+                print("[ENV-LOAD] Failed to Retrieve [opp_count] from <"+opp_count_file_name+">. using supplied value instead: "+str(opp_count))
                 self.opp_count = opp_count
 
             self.opp_mean = np.loadtxt(opp_mean_file_name, dtype=np.float32)
@@ -126,6 +130,9 @@ class RaisimGymVecEnv:
 
     def get_reward_info(self):
         return self.wrapper.getRewardInfo()
+
+    def get_metrics(self):
+        return self.wrapper.getMetrics()
 
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)

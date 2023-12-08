@@ -197,6 +197,20 @@ namespace raisim {
 
     const std::vector<std::map<std::string, float>>& getRewardInfo() { return rewardInformation_; }
 
+    void getMetrics(std::map<std::string,double> &metric) {
+    std::map<std::string,double> tempMetric = environments_[0]->getMetrics();
+    for (auto it = tempMetric.begin(); it != tempMetric.end(); ++it) {metric[it->first] = 0.0;}
+
+#pragma omp parallel for schedule(auto)
+
+      for(int i=0; i<num_envs_; i++) {
+        tempMetric = environments_[i]->getMetrics();
+        for (auto it = tempMetric.begin(); it != tempMetric.end(); ++it) {
+          metric[it->first] += it->second * (1.0/num_envs_);
+        }
+      }
+    }
+
   private:
     void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,Eigen::Ref<EigenRowMajorMat> opponentOb,bool updateStatistics) {
       if (updateStatistics) {

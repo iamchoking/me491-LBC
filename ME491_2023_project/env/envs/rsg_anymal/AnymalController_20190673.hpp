@@ -50,10 +50,7 @@ class AnymalController_20190673 {
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 64; // always padded to 64 (for compatibility)
-    // ACTUAL DIMS: 42
-    obPaddingDim_ = 64-47;
-    obPadding_.setZero(obPaddingDim_);
+    obDim_ = 54;
 
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
@@ -67,10 +64,10 @@ class AnymalController_20190673 {
     // actionStd_.setConstant(0.2);
 
     /// indices of links that should not make contact with ground
-    footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("LH_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RH_SHANK"));
+    footIndices_.push_back(anymal_->getBodyIdx("LF_SHANK"));
+    footIndices_.push_back(anymal_->getBodyIdx("RF_SHANK"));
+    footIndices_.push_back(anymal_->getBodyIdx("LH_SHANK"));
+    footIndices_.push_back(anymal_->getBodyIdx("RH_SHANK"));
 
     return true;
   }
@@ -93,12 +90,17 @@ class AnymalController_20190673 {
     if (playerNum_ == 0) {
       // std::cout << "Controller L93" << std::endl;
 
-      gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;                 //position
-      if(random_heading){gc_init_.segment(3,4) << 1,0,0,0;} // no "heading correction" (effective heading randomness)
-      else{gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2);} //rotation
+      if(random_heading){
+        gc_init_.head(3) << (double(random()%10000)/10000.0)*5-2.5,(double(random()%10000)/10000.0)*5-2.5,0.5;
+        double initialAng = (double(random()%10000)/10000.0)*M_PI*2;
+        gc_init_.segment(3,4) << cos(initialAng / 2), 0, 0, sin(initialAng / 2);
+      }
+      else{
+        // same as skeleton
+        gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;                 //position
+        gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2);
+      }
       // std::cout << "Controller L97" << std::endl;
-
-      // gc_init_.head(3) << 2.5 * std::cos(theta), 2.5 * std::sin(theta), 0.5;                 //position
     }
     else {
       // std::cout << "Controller L103" << std::endl;
@@ -106,20 +108,23 @@ class AnymalController_20190673 {
       if(random_heading){
         Eigen::Vector3d initialPos;
         Eigen::Vector3d opponentPos;
-        opponentPos << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;
+        opponentPos << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5; // assume opponent was also spawned with fixed heading
         initialPos << (double(random()%10000)/10000.0)*5-2.5,(double(random()%10000)/10000.0)*5-2.5,0.5;
         while ((initialPos - opponentPos).norm() < 1){
           initialPos << (double(random()%10000)/10000.0)*5-2.5,(double(random()%10000)/10000.0)*5-2.5,0.5;
         }
+
+        double initialAng = (double(random()%10000)/10000.0)*M_PI*2;
         gc_init_.head(3) << initialPos;
+        gc_init_.segment(3,4) << cos(initialAng / 2), 0, 0, sin(initialAng / 2);
       }
       else {
+        // same as skeleton code
         gc_init_.head(3) << 1.5 * std::cos(theta + M_PI), 1.5 * std::sin(theta + M_PI), 0.5;
+        gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);
       }
       // std::cout << "Controller L106" << std::endl;
 
-      if(random_heading){gc_init_.segment(3,4) << 1,0,0,0;} // no "heading correction" (effective heading randomness)
-      else{gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);}
       // std::cout << "Controller L109" << std::endl;
 
 
@@ -131,7 +136,57 @@ class AnymalController_20190673 {
     return true;
   }
 
-  inline void updateObservation(raisim::World *world) { /// (!!!) getting observation
+  // inline void updateObservation(raisim::World *world) { /// (!!!) getting observation
+  //   anymal_->getState(gc_, gv_);
+  //   raisim::Vec<4> quat;
+  //   quat[0] = gc_[3];
+  //   quat[1] = gc_[4];
+  //   quat[2] = gc_[5];
+  //   quat[3] = gc_[6];
+  //   raisim::quatToRotMat(quat, rot_);
+  //   bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
+  //   bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
+  //
+  //   ///////////////////////////////////////////////////////////////////////////////////////////////
+  //   /// if you want use opponent cube`s state, use like below code
+  //
+  //   world->getObject(opponentObjectIdx_)->getPosition(0,opponentPos_);
+  //   world->getObject(opponentObjectIdx_)->getOrientation(0,opponentRot_);
+  //   world->getObject(opponentObjectIdx_)->getVelocity(0,opponentLinearVel_);
+  //   ///////////////////////////////////////////////////////////////////////////////////////////////
+  //
+  //   // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
+  //   Vec<3> relativePos;
+  //   anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
+  //
+  //   Eigen::Vector3d relVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,3));
+  //
+  //   auto x_b = rot_.e().coeff(0,0);
+  //   auto y_b = rot_.e().coeff(0,1);
+  //
+  //   auto x_o = opponentRot_.e().coeff(0,0);
+  //   auto y_o = opponentRot_.e().coeff(0,1);
+  //
+  //   auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
+  //
+  //   // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
+  //   // std::cout << obPadding_ << "garbled?" <<std::endl ;
+  //
+  //   obDouble_ <<                         /// Name                             Dims
+  //      gc_.head(3)                    /// body position                     3
+  //     ,rot_.e().row(2).transpose()     /// body orientation (g direction)   3
+  //     ,gc_.tail(12)                   /// joint angles                     12
+  //     ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
+  //     ,gv_.tail(12)                   /// joint velocity                   12
+  //     ,relativePos.e(),relVel       /// relative position and velocity   6
+  //     ,headingAngle                      /// heading angle for players        1
+  //     ,gc_.head(2).norm()             /// center distance                  1
+  //     ,gv_.head(3)                    /// body velocity                    3
+  //     ,obPadding_                        /// padding                          (17)
+  //     ;                                  /// (total+padding)                  47+17
+  // }
+
+  inline void updateObservation(raisim::World *world) {
     anymal_->getState(gc_, gv_);
     raisim::Vec<4> quat;
     quat[0] = gc_[3];
@@ -139,52 +194,109 @@ class AnymalController_20190673 {
     quat[2] = gc_[5];
     quat[3] = gc_[6];
     raisim::quatToRotMat(quat, rot_);
+
+    // var    dims    description
+
+    // position data  [6]
+    //  r      1      distance from center, in xy plane
+    //  z      1      body height, world coordinates
+    // th      1      angle between xy-plane projection of body x axis and vector from origin to body center
+    // ez_b    3      gravity direction in body coordinates
+
+    // velocity data  [6]
+    //  rdot   1      movement speed from center, in terms of xy plane
+    //  zdot   1      body height speed, world coordinates
+    // vrad    1      radial speed norm(v_xy - rdot)
+    //  w_b    3      angular velocity in body coordinates
+
+    // joint data     [24]
+    // gc_.tail(12)
+    // gv_.tail(12)
+
+    // relative data  [12]
+    // relPos  6      relative position in body coordinates
+    // relVel  6      relative velocity (moving frame) in body coordinates
+    // headAng_ 1      angle (x-projection) of self and opponent
+
+    // contact data   [5]
+    // contFt  4      feet contact (binary)
+    // contOpp 1      opponent contact (binary)
+
+    // total: 54 dims
+
     bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    /// if you want use opponent cube`s state, use like below code
-
     world->getObject(opponentObjectIdx_)->getPosition(0,opponentPos_);
     world->getObject(opponentObjectIdx_)->getOrientation(0,opponentRot_);
     world->getObject(opponentObjectIdx_)->getVelocity(0,opponentLinearVel_);
-    ///////////////////////////////////////////////////////////////////////////////////////////////
 
     // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
-    Vec<3> relativePos;
-    anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
+    Vec<3> relPosVec;
+    anymal_->getPositionInBodyCoordinate(0,opponentPos_,relPosVec);
 
-    Eigen::Vector3d relativeVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
+    // position data
+    auto r = gc_.head(2).norm();
+    auto z = gc_(2);
+    // th is the angle betweeen (rot_.e().col(0).head(2)) and (-(gc_.head(2))
+    auto ex_w = rot_.e().col(0).head(2);
+    auto rx_w = -(gc_.head(2)); // xy-proj of position vector from body to origin, in world coord
+    auto th = std::atan2(ex_w(1)*rx_w(0)-ex_w(0)*rx_w(1),ex_w.transpose()*rx_w);
 
-    auto x_b = rot_.e().coeff(0,0);
-    auto y_b = rot_.e().coeff(0,1);
+    auto ez_b = rot_.e().row(2).transpose();
 
-    auto x_o = opponentRot_.e().coeff(0,0);
-    auto y_o = opponentRot_.e().coeff(0,1);
+    // velocity data
+    auto rdot = gv_.head(2).transpose()*rx_w;
+    auto zdot = gv_(2);
+    auto vrad = (gv_.head(2)- rdot*(rx_w)).norm(); // the normal compoenent of gv_.head(2) wrt rx_w)
+    auto w_b = rot_.e().transpose() * gv_.segment(3,3);
 
-    auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
+    // relative data
+    Eigen::Vector3d relPos = relPosVec.e();
+    Eigen::Vector3d relVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,3));
 
-    // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
-    // std::cout << obPadding_ << "garbled?" <<std::endl ;
+    Vec<3> oppx_b; // x axis of opponent expressed in body coord.
+    anymal_->getPositionInBodyCoordinate(0,opponentRot_.col(0),oppx_b);
+    if(oppx_b.e().head(2).norm() < 0.01){headAng_ = 0;} // prevent erratic values when enemy x axis is almost alligned with my z axis
+    else{headAng_ = std::atan2(oppx_b.e()(1),oppx_b.e()(0));}
 
-    obDouble_ <<                         /// Name                             Dims
-       gc_.head(3)                    /// body position                     3
-      ,rot_.e().row(2).transpose()     /// body orientation                 3
-      ,gc_.tail(12)                   /// joint angles                     12
-      ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
-      ,gv_.tail(12)                   /// joint velocity                   12
-      ,relativePos.e(),relativeVel       /// relative position and velocity   6
-      ,headingAngle                      /// heading angle for players        1
-      ,gc_.head(2).norm()             /// center distance                  1
-      ,gv_.head(3)                    /// body velocity                    3
-      ,obPadding_                        /// padding                          (17)
-      ;                                  /// (total+padding)                  47+17
+    // contact data
+    Eigen::Vector4d contFt;
+    double contOpp = 0.0;
+    contFt.setZero();
+
+    feetContact_[0] = -1;
+    feetContact_[1] = -1;
+    feetContact_[2] = -1;
+    feetContact_[3] = -1;
+    opponentContact_ = false;
+
+    for (auto &contact: anymal_->getContacts()) {
+      if (contact.getPairObjectIndex() == opponentObjectIdx_) { opponentContact_ = true; contOpp = 1.0;}
+      for(int i = 0;i < 4;i++){
+        if(contact.getlocalBodyIndex() == footIndices_[i]){
+          feetContact_[i]=contact.getIndexInObjectContactList();
+          contFt(i)=1.0;
+        }
+      }
+    }
+
+    obDouble_ <<
+      //position data
+      r,z,th,ez_b,
+      // velocity data
+      rdot,zdot,vrad,w_b,
+      // joint data
+      gc_.tail(12),gv_.tail(12),
+      // relative data
+      relPos,relVel,headAng_,
+      // contact data
+      contFt,contOpp
+      ;
   }
 
   inline void recordReward(Reward *rewards) { ///(!!!) Setting rewards!
-    /// (skeleton) reward for forward running
-    /// assumed that _gc and _gv is always updated prior to calling this function.
-    bool opponentContact = false;
+    /// assumed updateObservation is ran before this function is run
+    /// (--> ) _gc and _gv is always updated prior to calling this function. (,etc.)
 
     /// MASS of opponent (this is mainly for graphing purposes)
     auto opponentMass = world_->getObject(opponentObjectIdx_)->getMass(0);
@@ -199,32 +311,15 @@ class AnymalController_20190673 {
     // Vec<3> contactVel1;
     Vec<3> contactVel2;
     float slipMaxVel = 0;
-    float flight = 1;
-    for (auto &contact: anymal_->getContacts()) {
-      if(contact.getPairObjectIndex() == opponentObjectIdx_){opponentContact = true;}
+    float flight = 1.0f;
 
-      if (footIndices_.find(contact.getlocalBodyIndex()) != footIndices_.end()) { // is a foot contact
-        flight = 0;
-        // anymal_->getPositionInBodyCoordinate(contact.getlocalBodyIndex(),contact.getPosition(),bContact);
-        // anymal_->getVelocity(contact.getlocalBodyIndex(),bContact,contactVel1);
-        anymal_->getContactPointVel(contact.getIndexInObjectContactList(),contactVel2);
-        // std::cout << "Vel1 : " << contactVel1 << std::endl;
-        // std::cout << "Vel2 : " << contactVel2 << std::endl;
-        if(contactVel2.e().coeff(2) > 0.01) { // don't count as slipping if contact is moving away (z value larger than zero)
-          // flight = 0;
-          // slipMaxVel = std::max(std::min(float(contactVel1.e().head(2).norm()), 1.00f), slipMaxVel); //clipped at 1
-          slipMaxVel = std::max(std::min(float(contactVel2.e().head(2).norm()), 1.00f), slipMaxVel); //clipped at 1
-        }
-        // std::cout << "[Contact] idx:" << contact.getlocalBodyIndex() <<" pos: " << std::endl;
-        // std::cout << contact.getPosition() << std::endl;
-        // std::cout << " velocity: " << wVelocity << " score: " << slipMaxVel << std::endl;
+    for(int i;i<4;i++){
+      if(feetContact_[i] != -1){
+        flight = 0.0f;
+        anymal_->getContactPointVel(feetContact_[i],contactVel2);
+        slipMaxVel = std::max(std::min(float(contactVel2.e().head(2).norm()), 1.00f), slipMaxVel); //clipped at 1
       }
     }
-    // if(slipMaxVel < 0.1){slipMaxVel = 0;} // no slipping if speed less than 0.1
-    // std::cout << "# of feet in contact:" << numTouch;
-    // if(slipMaxVel > 0.3){std::cout << " SLIP (vel: " << slipMaxVel << ")";}
-    // if(numTouch == 0){std::cout << " FLIGHT";}
-    // std::cout << std::endl;
     rewards->record("slip",slipMaxVel);
     rewards->record("flight",flight);
 
@@ -256,7 +351,7 @@ class AnymalController_20190673 {
     eRelPos.normalize();
     // reward velocity facing toward opponent,
     float ramPoint = std::min(3.0f,std::max(-3.0f,(float(eRelPos.dot(rot_.e().transpose() * gv_.segment(0, 3)))))) / 3.0f ; //scaled to -1~1
-    if(opponentContact){
+    if(opponentContact_){
       ramPoint+=ramPoint*float(1+opponentMass/anymal_->getMass(0))+0.3f; // when in contact, give it bonus + scaled for mass (proportional to resulting momentum)
     } // when in contact, give full mark plus extra (always promote contact)
 
@@ -265,7 +360,28 @@ class AnymalController_20190673 {
     // [closer to center]
     rewards->record("center", gc_.head(2).norm());
 
-    // "T-boning opponent" TODO
+    // "T-boning opponent"
+    // (only give reward when robot is "facing" the opponent)
+    auto tboneScore = 1.0f - float((std::abs(headAng_)-M_PI/2)*(std::abs(headAng_)-M_PI/2) / (M_PI*M_PI/4.0))
+    double tboneMultiplier = 0;
+
+    Vec<3> opp_bVec;
+    Eigen::Vector3d x_b;
+    anymal_->getPositionInBodyCoordinate(0,opponentPos_,opp_bVec);
+    Eigen::Vector3d opp_b = opp_bVec.e();
+    opp_b.normalize();
+    x_b << 1,0,0;
+
+    //opponent within 10deg cone and close proximity
+    if(opp_b.transpose()*x_b > std::cos(M_PI/18.0) && opponentPos_.norm() < 1.5){tboneMultiplier += 1;}
+
+    Vec<3> bod_oVec;
+    Eigen::Vector3d x_o;
+    Eigen::Vector3d bod_o = opponentRot_.transpose()*rot_*(-opp_b); // unit vector from o to b, in o frame
+    x_o << 1,0,0;
+    if(bod_o.transpose()*x_o > std::cos(M_PI/18.0) && opponentPos_.norm() < 1.5){tboneMultiplier += 1;}
+
+    rewards->record("tbone", tboneScore*tboneMultiplier);
 
   }
 
@@ -336,11 +452,18 @@ class AnymalController_20190673 {
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::VectorXf obFloat_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
-  std::set<size_t> footIndices_;
+  std::vector<size_t> footIndices_;
 
   raisim::Vec<3>   opponentPos_;
   raisim::Mat<3,3> opponentRot_;
   raisim::Vec<3>   opponentLinearVel_;
+
+  Eigen::Vector3d relativePos_;
+
+  double headAng_;
+
+  bool    opponentContact_;
+  int     feetContact_[4]; //elements are -1 or contact.getIndexInObjectContactList()
 
   Eigen::VectorXd obPadding_;
   int obDim_ = 0, actionDim_ = 0, obPaddingDim_ = 0;
