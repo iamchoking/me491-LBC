@@ -5,6 +5,8 @@
 //
 // All rights reserved.
 
+// CHRIS: modes added!
+
 #pragma once
 
 #include <vector>
