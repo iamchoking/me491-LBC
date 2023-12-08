@@ -51,19 +51,19 @@ environment:
   reward_lose: -10
   reward_draw: -5
 
-  training_mode: 0 #0: cube, 1: self-train
-  training_init_shuffle: True
+  training_mode:           0 #0: cube, 1: self-train
+  training_init_shuffle:   True
   training_dummy_opponent: False
 
-  curriculum_mass_start: 20
-  curriculum_win_streak: 10
-  curriculum_mass_incr: 0.1
+  curriculum_mass_start:   20
+  curriculum_win_streak:   10
+  curriculum_mass_incr:    0.1
   curriculum_cube_shuffle: True
   curriculum_head_shuffle: True
 
-  stability_mode: True
+  stability_mode:          True
   stability_cube_teleport: -1
-  stability_win_decay: 1.1
+  stability_win_decay:     1.1
 
 evaluation:
   iteration: 10000 #Write your final submit policy iteration. ex) if you submit full_10000.pt

@@ -71,8 +71,8 @@ act_dim = env.num_acts
 opp_ob_dim = env.opp_num_obs
 opp_act_dim= env.opp_num_acts
 
-print(opp_ob_dim)
-print(opp_act_dim)
+# print(opp_ob_dim)
+# print(opp_act_dim)
 
 num_threads = cfg['environment']['num_threads']
 
