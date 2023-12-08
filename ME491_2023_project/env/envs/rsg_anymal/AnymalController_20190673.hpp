@@ -10,6 +10,7 @@
 #include <set>
 #include "../../BasicEigenTypes.hpp"
 #include "raisim/World.hpp"
+#include <random>
 
 namespace raisim {
 
@@ -51,7 +52,7 @@ class AnymalController_20190673 {
     /// MUST BE DONE FOR ALL ENVIRONMENTS
     obDim_ = 64; // always padded to 64 (for compatibility)
     // ACTUAL DIMS: 42
-    obPaddingDim_ = 64-44;
+    obPaddingDim_ = 64-47;
     obPadding_.setZero(obPaddingDim_);
 
     actionDim_ = nJoints_;
@@ -88,25 +89,39 @@ class AnymalController_20190673 {
     return true;
   }
 
-  inline bool reset(raisim::World *world, double theta) { //TODO change the reset back to what it was
+  inline bool reset(raisim::World *world, double theta,bool random_heading=false) {
     if (playerNum_ == 0) {
       // std::cout << "Controller L93" << std::endl;
 
       gc_init_.head(3) << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;                 //position
-      gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2); //rotation
+      if(random_heading){gc_init_.segment(3,4) << 1,0,0,0;} // no "heading correction" (effective heading randomness)
+      else{gc_init_.segment(3, 4) << cos((theta - M_PI) / 2), 0, 0, sin((theta - M_PI) / 2);} //rotation
       // std::cout << "Controller L97" << std::endl;
 
       // gc_init_.head(3) << 2.5 * std::cos(theta), 2.5 * std::sin(theta), 0.5;                 //position
-      // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
     }
     else {
       // std::cout << "Controller L103" << std::endl;
 
-      gc_init_.head(3) << 1.5 * std::cos(theta + M_PI), 1.5 * std::sin(theta + M_PI), 0.5;
+      if(random_heading){
+        Eigen::Vector3d initialPos;
+        Eigen::Vector3d opponentPos;
+        opponentPos << 1.5 * std::cos(theta), 1.5 * std::sin(theta), 0.5;
+        initialPos << (double(random()%10000)/10000.0)*5-2.5,(double(random()%10000)/10000.0)*5-2.5,0.5;
+        while ((initialPos - opponentPos).norm() < 1){
+          initialPos << (double(random()%10000)/10000.0)*5-2.5,(double(random()%10000)/10000.0)*5-2.5,0.5;
+        }
+        gc_init_.head(3) << initialPos;
+      }
+      else {
+        gc_init_.head(3) << 1.5 * std::cos(theta + M_PI), 1.5 * std::sin(theta + M_PI), 0.5;
+      }
       // std::cout << "Controller L106" << std::endl;
 
-      gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);
+      if(random_heading){gc_init_.segment(3,4) << 1,0,0,0;} // no "heading correction" (effective heading randomness)
+      else{gc_init_.segment(3, 4) << cos(theta / 2), 0, 0, sin(theta / 2);}
       // std::cout << "Controller L109" << std::endl;
+
 
       // gc_init_.head(3) << 2.5 * std::cos(theta + M_PI), 2.5 * std::sin(theta + M_PI), 0.5;
       // gc_init_.segment(3,4) << 1,0,0,0; // no "heading correction" (effective heading randomness)
@@ -153,7 +168,7 @@ class AnymalController_20190673 {
     // std::cout << obPadding_ << "garbled?" <<std::endl ;
 
     obDouble_ <<                         /// Name                             Dims
-              gc_.head(3)                    /// body position                     3
+       gc_.head(3)                    /// body position                     3
       ,rot_.e().row(2).transpose()     /// body orientation                 3
       ,gc_.tail(12)                   /// joint angles                     12
       ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
@@ -161,57 +176,10 @@ class AnymalController_20190673 {
       ,relativePos.e(),relativeVel       /// relative position and velocity   6
       ,headingAngle                      /// heading angle for players        1
       ,gc_.head(2).norm()             /// center distance                  1
-      ,obPadding_                        /// padding                          (10)
-      ;                                  /// (total+padding)                  44+10
+      ,gv_.head(3)                    /// body velocity                    3
+      ,obPadding_                        /// padding                          (17)
+      ;                                  /// (total+padding)                  47+17
   }
-
-  // inline void updateObservationCube(raisim::World *world) { /// (!!!) getting observation
-  //   anymal_->getState(gc_, gv_);
-  //   raisim::Vec<4> quat;
-  //   quat[0] = gc_[3];
-  //   quat[1] = gc_[4];
-  //   quat[2] = gc_[5];
-  //   quat[3] = gc_[6];
-  //   raisim::quatToRotMat(quat, rot_);
-  //   bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3);
-  //   bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
-  //
-  //   ///////////////////////////////////////////////////////////////////////////////////////////////
-  //   /// if you want use opponent cube`s state, use like below code
-  //   auto opponent = reinterpret_cast<raisim::SingleBodyObject *>(world->getObject(opponentName_));
-  //
-  //   opponent->getPosition(opponentPos_);
-  //   opponent->getRotationMatrix(opponentRot_);
-  //   opponent->getLinearVelocity(opponentLinearVel_);
-  //   ///////////////////////////////////////////////////////////////////////////////////////////////
-  //
-  //   // Eigen::Vector3d relativePos = rot_.e().transpose() * (opponentPos_.e() - gc_.segment(0,2));
-  //   Vec<3> relativePos;
-  //   anymal_->getPositionInBodyCoordinate(0,opponentPos_,relativePos);
-  //
-  //   Eigen::Vector3d relativeVel = rot_.e().transpose() * (opponentLinearVel_.e() - gv_.segment(0,2));
-  //   auto x_b = rot_.e().coeff(0,0);
-  //   auto y_b = rot_.e().coeff(0,1);
-  //   auto x_o = opponentRot_.e().coeff(0,0);
-  //   auto y_o = opponentRot_.e().coeff(0,1);
-  //
-  //   auto headingAngle = std::atan2(y_o,x_o) - std::atan2(y_b,x_b);
-  //
-  //   // obPadding_ << Eigen::VectorXd::Random(obPaddingDim_)*5.0; // need to randomize to discourage inference
-  //   // std::cout << obPadding_ << "garbled?" <<std::endl ;
-  //
-  //   obDouble_ <<                         /// Name                             Dims
-  //      gc_.head(3)                    /// body position                     3
-  //     ,rot_.e().row(2).transpose()     /// body orientation                 3
-  //     ,gc_.tail(12)                   /// joint angles                     12
-  //     ,bodyLinearVel_, bodyAngularVel_   /// body linear&angular velocity     6
-  //     ,gv_.tail(12)                   /// joint velocity                   12
-  //     ,relativePos.e(),relativeVel       /// relative position and velocity   6
-  //     ,headingAngle                      /// heading angle for players        1
-  //     ,gc_.head(2).norm()             /// center distance                  1
-  //     ,obPadding_                        /// padding                          (10)
-  //     ;                                  /// (total+padding)                  44+10
-  // }
 
   inline void recordReward(Reward *rewards) { ///(!!!) Setting rewards!
     /// (skeleton) reward for forward running
@@ -236,13 +204,14 @@ class AnymalController_20190673 {
       if(contact.getPairObjectIndex() == opponentObjectIdx_){opponentContact = true;}
 
       if (footIndices_.find(contact.getlocalBodyIndex()) != footIndices_.end()) { // is a foot contact
+        flight = 0;
         // anymal_->getPositionInBodyCoordinate(contact.getlocalBodyIndex(),contact.getPosition(),bContact);
         // anymal_->getVelocity(contact.getlocalBodyIndex(),bContact,contactVel1);
         anymal_->getContactPointVel(contact.getIndexInObjectContactList(),contactVel2);
         // std::cout << "Vel1 : " << contactVel1 << std::endl;
         // std::cout << "Vel2 : " << contactVel2 << std::endl;
         if(contactVel2.e().coeff(2) > 0.01) { // don't count as slipping if contact is moving away (z value larger than zero)
-          flight = 0;
+          // flight = 0;
           // slipMaxVel = std::max(std::min(float(contactVel1.e().head(2).norm()), 1.00f), slipMaxVel); //clipped at 1
           slipMaxVel = std::max(std::min(float(contactVel2.e().head(2).norm()), 1.00f), slipMaxVel); //clipped at 1
         }
@@ -263,9 +232,14 @@ class AnymalController_20190673 {
     rewards->record("tilt",float(std::pow(rot_(0,2),2.0)) + float(std::pow(rot_(1,2),2.0)));
     // ^ rot_(1,2) x component of unit z vector at 0, rot_(2,2) y component of ~
 
-    // [too close to the edge (1m)]
-    if(opponentPos_.e().head(2).norm() > gc_.head(2).norm()){rewards -> record("edge",0);} // don't penalize when opponent is being pushed off
-    else{rewards->record("edge",float(std::max(2.0,gc_.head(2).norm())-2.0));}
+    // [posiition / speed toward the edge (1m)] "when within 1m of the edge, penalize speed toward the edge"
+    Eigen::Vector2d centerUnit = gc_.head(2);
+    centerUnit.normalize();
+    float edgeSpeed = std::max(-1.0,std::min(3.0,gv_.head(2).dot(centerUnit.transpose())))/3.0; //max is 3, min is -1
+    float edgeScore = float(std::max(gc_.head(2).norm()-2.0,0.0)*edgeSpeed); //normalized from to -0.333 to 1
+
+    if(opponentPos_.e().head(2).norm() > gc_.head(2).norm()){edgeScore *= 0.3;} // take more risks when doing better
+    rewards->record("edge",edgeScore);
 
     /// PROMOTE
 
@@ -288,6 +262,9 @@ class AnymalController_20190673 {
 
     rewards->record("ram",ramPoint);
 
+    // [closer to center]
+    rewards->record("center", gc_.head(2).norm());
+
     // "T-boning opponent" TODO
 
   }
@@ -303,6 +280,11 @@ class AnymalController_20190673 {
     // std::cout << float(-abs(angle)/(M_PI)) << std::endl; //scaled to (-1 ~ 0)
     // std::cout << opponentPos_<<std::endl;
     // std::cout << float(std::pow(rot_(0,2),2.0)) + float(std::pow(rot_(1,2),2.0)) << std::endl;
+  }
+
+  inline void resetOpponentIndex(const std::string name){
+    opponentName_ = name;
+    opponentObjectIdx_ = world_->getObject(name)->getIndexInWorld();
   }
 
   inline const Eigen::VectorXd &getObservation() {

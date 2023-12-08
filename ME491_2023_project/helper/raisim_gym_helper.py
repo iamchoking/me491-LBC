@@ -34,8 +34,8 @@ def tensorboard_launcher(directory_path, open_browser=True):
 
 def load_param(weight_path, env, actor, critic, optimizer, data_dir):
     if weight_path == "":
-        raise Exception("\nCan't find the pre-trained weight, please provide a pre-trained weight with --weight switch\n")
-    print("\nRetraining from the checkpoint:", weight_path+"\n")
+        raise Exception("\n[HELPER] Can't find the pre-trained weight, please provide a pre-trained weight with --weight switch\n")
+    print("\n[HELPER] Retraining from the checkpoint:", weight_path+"\n")
 
     iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
     weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -63,9 +63,9 @@ def load_param(weight_path, env, actor, critic, optimizer, data_dir):
 def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimizer, data_dir,opp_actor):
 
     if opp_weight_path == "":
-        raise Exception("\nCan't find the opponent weight, please provide a opponent weight with --oppweight switch\n")
+        raise Exception("\n[HELPER] Can't find the opponent weight, please provide a opponent weight with --oppweight switch\n")
     else:
-        print("\nLoading opponent from checkpoint:", opp_weight_path+"\n")
+        print("\n[HELPER] Loading opponent from checkpoint:", opp_weight_path+"\n")
         opp_iteration_number = opp_weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
         opp_weight_dir = opp_weight_path.rsplit('/', 1)[0] + '/'
 
@@ -75,12 +75,12 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
 
 
     if weight_path == "":
-        print("\nNo Specified pre-trained weight for player. Proceeding with new network\n")
+        print("\n[HELPER] No Specified pre-trained weight for player. Proceeding with new network\n")
         iteration_number = 0
         weight_dir = ""
         items_to_save = None
     else:
-        print("\nRetraining from the checkpoint:", weight_path+"\n")
+        print("\n[HELPER] Retraining from the checkpoint:", weight_path+"\n")
         # BOOKMARK
         iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
         weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -103,6 +103,6 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
     # load observation scaling (ignores if directory is "")
     env.load_scaling(
         dir_name=weight_dir         , iteration=iteration_number,
-        opp_dir_name=opp_weight_dir , opp_iteration=iteration_number
+        opp_dir_name=opp_weight_dir , opp_iteration=opp_iteration_number
     )
 

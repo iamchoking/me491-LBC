@@ -89,9 +89,9 @@ class RaisimGymVecEnv:
             self.var = np.loadtxt(var_file_name, dtype=np.float32)
 
         if opp_dir_name != "":
-            opp_mean_file_name = opp_dir_name + "/mean" + str(iteration) + ".csv"
-            opp_var_file_name = opp_dir_name + "/var" + str(iteration) + ".csv"
-            opp_count_file_name = opp_dir_name + "/count" + str(iteration)
+            opp_mean_file_name = opp_dir_name + "/mean" + str(opp_iteration) + ".csv"
+            opp_var_file_name = opp_dir_name + "/var" + str(opp_iteration) + ".csv"
+            opp_count_file_name = opp_dir_name + "/count" + str(opp_iteration)
 
             try:
                 opp_count_file = open(opp_count_file_name,'r').read()

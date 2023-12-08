@@ -46,35 +46,16 @@ environment:
     center:
       coeff: 0
 
-#        [FREE-FOR-ALL] (-> just win)
-##        PENALIZE
-#    slip:
-#      coeff: 0
-#    flight:
-#      coeff: 0
-#    tilt:
-#      coeff: 0
-#    edge:
-#      coeff: 0
-#
-##        PROMOTE
-#    face:
-#      coeff: 0
-#    ram:
-#      coeff: 0
-#    center:
-#      coeff: 0
-
 
   reward_win: 10
   reward_lose: -10
   reward_draw: -5
 
-  training_mode: 1 #0: cube, 1: self-train
+  training_mode: 0 #0: cube, 1: self-train
   training_init_shuffle: True
   training_dummy_opponent: False
 
-  curriculum_mass_start: 3
+  curriculum_mass_start: 20
   curriculum_win_streak: 10
   curriculum_mass_incr: 0.1
   curriculum_cube_shuffle: True

@@ -23,7 +23,6 @@
 #include <chrono>
 
 bool TIME_VERBOSE = false;
-bool STABLILTY_TRAIN = true; // this mode doesn't teloport the robot anymore when winning
 
 namespace raisim {
 
@@ -38,6 +37,10 @@ namespace raisim {
       robot_->setName(PLAYER_NAME);
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
+
+      READ_YAML(int   , trainingMode_         , cfg["training_mode"]);
+      READ_YAML(bool  , trainingShuffleInit_  , cfg["training_init_shuffle"]);
+      READ_YAML(bool  , trainingDummyOpponent_, cfg["training_dummy_opponent"]);
 
       /// add opponent (with same controller)
       cubeMass_ = 1.0;
@@ -62,7 +65,16 @@ namespace raisim {
       READ_YAML(int   , currWinStreak_, cfg["curriculum_win_streak"]);
       READ_YAML(float , currMassIncr_,  cfg["curriculum_mass_incr"]);
       READ_YAML(double, cubeMass_    ,  cfg["curriculum_mass_start"]);
+      READ_YAML(bool  , cubeShuffle_ ,  cfg["curriculum_cube_shuffle"]);
       cube_->setMass(cubeMass_);
+
+      /// Stability Training Params
+      float stabCubeTime;
+      READ_YAML(float, stabCubeTime    ,  cfg["stability_cube_teleport"]);
+      READ_YAML(float, stabWinDecay_   ,  cfg["stability_win_decay"]);
+      READ_YAML(bool , stabMode_       ,  cfg["stability_mode"]);
+      if(stabCubeTime <= 0.0){stabCubeSteps_ = 1000000;}
+      else{stabCubeSteps_ = int(stabCubeTime/control_dt_);}
 
       /// visualize if it is the first environment
       if (visualizable_) {
@@ -84,21 +96,30 @@ namespace raisim {
     void reset() {
       auto theta = uniDist_(gen_) * 2 * M_PI;
 
-      if(STABLILTY_TRAIN && winStreak_ > 0){}
-      else{controller_.reset(&world_, theta);}
+      if(stabMode_ && winStreak_ > 0){}
+      else{controller_.reset(&world_, theta,trainingShuffleInit_);}
       reset_cube();
 
       timer_ = 0;
     }
 
     void reset_cube(){
+      // world_.removeObject(reinterpret_cast<Object*>(cube_));
+      int prevIndex =cube_->getIndexInWorld();
+      world_.removeObject(cube_);
+      cube_ = world_.addBox(uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*0.5+0.5,uniDist_(gen_)*1.3+0.2,cubeMass_);
+      // cube dims: x: 0.5~1.0, y: 0.5~1.0, z: 0.2~1.5
+      cube_->setName("OPPONENT");
+      controller_.resetOpponentIndex("OPPONENT");
+      // std::cout << "cube index updated from " << prevIndex << " to " << cube_->getIndexInWorld() << std::endl;
+
       /// put back cube (random position)
       Eigen::Vector3d cubePos;
       Vec<3> robotPos;
       robot_->getPosition(0,robotPos);
-      cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2;
+      cubePos << uniDist_(gen_)*5-2.5, uniDist_(gen_)*5-2.5, cube_->getDim()(2)/2;
       while(cubePos.head(2).norm() > 2.5 || (cubePos.head(2)-robotPos.e().head(2)).norm() < 1 ){
-        cubePos << uniDist_(gen_)*2.5, uniDist_(gen_)*2.5, cube_->getDim()(2)/2; //resample when inadequate
+        cubePos << uniDist_(gen_)*5-2.5, uniDist_(gen_)*5-2.5, cube_->getDim()(2)/2;
       }
       cube_->setPosition(cubePos);
 
@@ -144,6 +165,8 @@ namespace raisim {
       controller_.recordReward(&rewards_);    // R
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] record reward for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
+
+      if(stabMode_ && timer_ % stabCubeSteps_ == 0){reset_cube();}
 
       if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
       return rewards_.sum();
@@ -204,7 +227,7 @@ namespace raisim {
       }
 
       if (timer_ > 10 * 100) {
-        if(STABLILTY_TRAIN){winStreak_ = 1;} // to prevent resetting robot on timeout
+        if(stabMode_){winStreak_ = 1;} // to prevent resetting robot on timeout
         else{winStreak_ = 0;}
         termialReward = terminalRewardDraw_;
         return true;
@@ -212,7 +235,8 @@ namespace raisim {
 
       if (!player_die() && cube_die()) {
         winStreak_ += 1;
-        termialReward = terminalRewardWin_;
+        if(stabMode_){ termialReward = terminalRewardWin_*stabWinDecay_;} // less reward for winning (one win and death results in negative net reward)
+        else{termialReward = terminalRewardWin_;}
         return true;
       }
 
@@ -278,8 +302,17 @@ namespace raisim {
 
     double cubeMass_ = 0.5;
 
+    int trainingMode_;
+    bool trainingDummyOpponent_;
+    bool trainingShuffleInit_;
+
     int currWinStreak_;
     double currMassIncr_;
+    bool cubeShuffle_;
+
+    bool stabMode_;
+    int stabCubeSteps_;
+    float stabWinDecay_;
 
     float terminalRewardWin_ ;
     float terminalRewardLose_;
