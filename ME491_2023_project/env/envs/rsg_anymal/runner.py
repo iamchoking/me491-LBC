@@ -22,17 +22,24 @@ task_name = "ME491_2023_project"
 
 # configuration
 parser = argparse.ArgumentParser()
-parser.add_argument('-w', '--weight', help='pre-trained weight path', type=str, default='')
-parser.add_argument('-v', '--oppweight', help='path for opponent weight', type=str, default='')
+parser.add_argument('-x', '--weight', help='pre-trained weight path', type=str, default='')
+parser.add_argument('-y', '--oppweight', help='path for opponent weight', type=str, default='')
 parser.add_argument('-l', '--lr', help='prescribed starting learning rate',type=float,default=-1)
+parser.add_argument('-k','--kl', help='desired kl divergence (how much stride is desired)',type=float,default=-1)
+
 parser.add_argument('-c','--config', help='config file name (without .yaml) in preset-cfg',type=str,default='none')
+
+parser.add_argument('-v','--visualize',help='just visualize without training',type=bool,default=False)
 
 args = parser.parse_args()
 weight_path = args.weight
 opp_weight_path = args.oppweight
 starting_lr = args.lr
 cfg_name = args.config
-
+prescribed_kl = args.kl
+if prescribed_kl < 0:
+    prescribed_kl = 0.01
+vis_only = args.visualize
 
 # check if gpu is available
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -46,6 +53,7 @@ home_path = task_path + "/../../../.."
 
 # config
 if cfg_name == '' or cfg_name == 'none':
+    cfg_name = "default"
     print("[RUNNER] No cfg file was given. Loading default from: "+task_path+"/cfg.yaml")
     cfg_path = task_path + "/cfg.yaml"
 else:
@@ -61,6 +69,16 @@ if (not is_dummy) and do_selftrain and (opp_weight_path == '' or opp_weight_path
     print("[SELF-TRAIN] No opponent weight provided. Proceeding with dummy opponent")
     is_dummy = True
     do_selftrain = False
+
+
+if vis_only: # visualizer files are not stored
+    save_dir = home_path + "/ME491_2023_project/data/vis/"+cfg_name+"/"
+    cfg['environment']['num_envs'] = 1
+    cfg['environment']['eval_every_n'] = 1
+    cfg['environment']['max_time'] = 100
+    print('[VIS-ONLY] Simple Visualizatoin Mode')
+else:
+    save_dir = home_path + "/ME491_2023_project/data/"+task_name+"/"+cfg_name+"/"
 
 
 # create environment from the configuration file
@@ -105,11 +123,9 @@ opp_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], n
                                                                            cfg['seed']),
                          device)
 
-
-saver = ConfigurationSaver(log_dir=home_path + "/ME491_2023_project/data/"+task_name,
+saver = ConfigurationSaver(log_dir=save_dir,
                            save_items=[cfg_path, task_path + "/runner.py", task_path + "/Environment.hpp", task_path + "/AnymalController_20190673.hpp"])
 
-# logging
 
 # logging
 gym_logger=logging.getLogger(__name__)
@@ -129,24 +145,22 @@ gym_logger.addHandler(f_handler)
 
 tensorboard_launcher(saver.data_dir+"/..", False)  # press refresh (F5) after the first ppo update
 
+
 ppo = PPO.PPO(actor=actor,
               critic=critic,
               num_envs=cfg['environment']['num_envs'],
               num_transitions_per_env=n_steps,
               num_learning_epochs=4,
-              gamma=0.998,
+              gamma=0.995, # [!!] changed from .998 to .995
               lam=0.95,
               num_mini_batches=4,
               device=device,
               log_dir=saver.data_dir,
-              shuffle_batch=False,
+              shuffle_batch=False, # TODO experiment with batch shuffle
+              desired_kl=prescribed_kl, # [!!(defaults to 0.01)] sumo
               )
 
-if starting_lr > 0: # reset the optimizer
-    gym_logger.info("[PPO] Using Prescribed Learning Rate: "+ str(starting_lr))
-    ppo.optimizer = torch.optim.Adam([*ppo.actor.parameters(), *ppo.critic.parameters()], lr=starting_lr)
-    # self.optimizer = optim.Adam([*self.actor.parameters(), *self.critic.parameters()], lr=learning_rate)
-
+gym_logger.info("[PPO] Desired KL Divergence is "+str(prescribed_kl))
 analyzer = RewardMetricAnalyzer(env, ppo.writer)
 
 # if mode == 'retrain':
@@ -157,6 +171,16 @@ if not do_selftrain:
 else:
     load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, opp_actor)
 
+if starting_lr > 0: # reset the optimizer
+    gym_logger.info("[PPO] Replacing Optimizer With Learning Rate: " + str(starting_lr))
+    # gym_logger.info("[PPO] Previous State Dict : " + str(ppo.optimizer.state_dict()))
+    ppo.optimizer.load_state_dict(torch.optim.Adam([*ppo.actor.parameters(), *ppo.critic.parameters()], lr=starting_lr).state_dict())
+    # gym_logger.info("[PPO] New State Dict" + str(ppo.optimizer.state_dict()))
+
+ppo.learning_rate = ppo.optimizer.param_groups[0]['lr']
+# !! needed to negate leftover values!
+
+
 env.turn_off_visualization()
 
 def ppo_outer_loop(updates = 5000):
@@ -166,8 +190,7 @@ def ppo_outer_loop(updates = 5000):
         reward_sum = 0
         done_sum = 0
         average_dones = 0.
-        if update % cfg['environment']['plot_metric_n'] == 0:
-            analyzer.plot_metrics(env,update)
+
 
         if (update % cfg['environment']['eval_every_n'] == 0 and update != 0) or cfg['environment']['eval_every_n'] == 1:
             gym_logger.info("[RUNNER] Visualizing and evaluating the current policy")
@@ -177,7 +200,6 @@ def ppo_outer_loop(updates = 5000):
                 'critic_architecture_state_dict': critic.architecture.state_dict(),
                 'optimizer_state_dict': ppo.optimizer.state_dict(),
             }, saver.data_dir+"/full_"+str(update)+'.pt')
-            gym_logger.info('[RUNNER] Iteration '+str(update)+' Saved.')
 
             # we create another graph just to demonstrate the save/load method
             loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim, act_dim)
@@ -217,13 +239,15 @@ def ppo_outer_loop(updates = 5000):
                         time.sleep(wait_time)
 
             env.stop_video_recording()
-            gym_logger.info("[RUNNER] Video Logging Complete")
+            gym_logger.info("[RUNNER] Visualization Complete")
             env.turn_off_visualization()
 
             analyzer.analyze_and_plot(update)
             env.reset()
             env.save_scaling(saver.data_dir, str(update))
-            gym_logger.info("[RUNNER] Visualization Complete. Starting Iteration "+str(update))
+            gym_logger.info('[RUNNER] Iteration '+str(update)+' Saved.')
+
+            gym_logger.info("[RUNNER] Evaluation Complete. Starting Iteration "+str(update))
 
         # time measurements
         cur_time = time.time()
@@ -265,23 +289,38 @@ def ppo_outer_loop(updates = 5000):
 
         # take st step to get value obs
         obs,opp_obs = env.observe()
-        ppo.update(actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update)
+        # ppo.update(actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update)
+        ppo.update(actor_obs=obs,value_obs=obs,log_this_iteration=(update % cfg['environment']['plot_metric_n'] == 0),update=update)
         average_ll_performance = reward_sum / total_steps
         average_dones = done_sum / total_steps
         avg_rewards.append(average_ll_performance)
 
         actor.update()
+        env.curriculum_callback()
+
         actor.distribution.enforce_minimum_std((torch.ones(12)*0.2).to(device))
         t_backprop = time.time() - cur_time
 
-        # curriculum update. Implement it in Environment.hpp
-        env.curriculum_callback()
+        # logging additional metrics
+        if update % cfg['environment']['plot_metric_n'] == 0:
+            analyzer.update_metrics(env,
+                                    {
+                                        "average_reward":average_ll_performance,
+                                        "average_T_per_episode":average_dones*total_steps/env.num_envs,
+                                    }
+                                    )
+            analyzer.plot_metrics(env, update)
 
         end = time.time()
 
         gym_logger.info('[ITERATION-#{:>6}]-------{:>30}'.format(update, saver.data_dir.split('/')[-1]))
+        gym_logger.info('<Learning>')
         gym_logger.info('{:<40} {:>6}'.format("average ll reward: ", '{:0.10f}'.format(average_ll_performance)))
-        gym_logger.info('{:<40} {:>6}'.format("dones: ", '{:0.6f}'.format(average_dones)))
+        gym_logger.info('{:<40} {:>6}'.format("dones per env: ", '{:0.6f}'.format(average_dones*total_steps/env.num_envs)))
+        gym_logger.info('{:<40} {:>6}'.format("learning rate: ", '{:0.6f}'.format(ppo.optimizer.state_dict()['param_groups'][0]['lr'])))
+        gym_logger.info('{:<40} {:>6}'.format("kl stride: ", '{:0.6f}'.format(ppo.kl)))
+        gym_logger.info('')
+        gym_logger.info('<Performance>')
         gym_logger.info('{:<40} {:>6}'.format("time elapsed in this iteration: ", '{:6.4f}'.format(end - start)))
         gym_logger.info('{:<40} {:>6}'.format("fps: ", '{:6.0f}'.format(total_steps / (end - start))))
         gym_logger.info('{:<40} {:>6}'.format("real time factor: ", '{:6.0f}'.format(total_steps / (end - start)

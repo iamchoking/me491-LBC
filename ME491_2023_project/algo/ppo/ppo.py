@@ -73,6 +73,9 @@ class PPO:
         self.actions_log_prob = None
         self.actor_obs = None
 
+        # kl div (for logging)
+        self.kl = 0.0
+
     def act(self, actor_obs):
         self.actor_obs = actor_obs
         with torch.no_grad():
@@ -85,6 +88,7 @@ class PPO:
 
     def update(self, actor_obs, value_obs, log_this_iteration, update):
         last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        # predict final values with value function
 
         # Learning step
         self.storage.compute_returns(last_values.to(self.device), self.critic, self.gamma, self.lam)
@@ -97,10 +101,11 @@ class PPO:
     def log(self, variables):
         self.tot_timesteps += self.num_transitions_per_env * self.num_envs
         mean_std = self.actor.distribution.std.mean()
-        self.writer.add_scalar('PPO/value_function', variables['mean_value_loss'], variables['it'])
-        self.writer.add_scalar('PPO/surrogate', variables['mean_surrogate_loss'], variables['it'])
+        self.writer.add_scalar('PPO/vf_loss', variables['mean_value_loss'], variables['it'])
+        self.writer.add_scalar('PPO/surr_loss', variables['mean_surrogate_loss'], variables['it'])
         self.writer.add_scalar('PPO/mean_noise_std', mean_std.item(), variables['it'])
         self.writer.add_scalar('PPO/learning_rate', self.learning_rate, variables['it'])
+        self.writer.add_scalar('PPO/kl_stride', variables['kl_mean'], variables['it'])
 
     def _train_step(self, log_this_iteration):
         mean_value_loss = 0
@@ -116,13 +121,16 @@ class PPO:
                 mu_batch = self.actor.action_mean
                 sigma_batch = self.actor.distribution.std
 
-                # KL
+                # KL - divergence based learning rate scheduling
                 if self.desired_kl != None and self.schedule == 'adaptive':
                     with torch.no_grad():
                         kl = torch.sum(
                             torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
                         kl_mean = torch.mean(kl)
+                        self.kl = kl_mean # for logging
+                        # "how different is the current dist. compared to the previous?"
 
+                        # "bang-bang" controlling of learning rate
                         if kl_mean > self.desired_kl * 2.0:
                             self.learning_rate = max(1e-5, self.learning_rate / 1.2)
                         elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:

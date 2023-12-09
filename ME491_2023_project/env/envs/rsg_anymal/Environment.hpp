@@ -85,6 +85,7 @@ namespace raisim {
       READ_YAML(double, cubeMass_    ,  cfg["curriculum_mass_start"]);
       READ_YAML(bool  , cubeShuffle_ ,  cfg["curriculum_cube_shuffle"]);
       if(trainingMode_ == 0) {
+        cubeMass_ = std::max(0.5,uniDist_(gen_)*5-2.5+cubeMass_); //give a 2.5kg spread for diverse samples
         cube_->setMass(cubeMass_);
       }
 
@@ -111,16 +112,16 @@ namespace raisim {
 
       metrics_["cube_weight"]      = 0.0;
       metrics_["consecutive_wins"] = 0.0;
-      metrics_["win_interval"]    = 0.0;
-      metrics_["lose_interval"]   = 0.0;
-      metrics_["draw_interval"]   = 0.0;
-      metrics_["win_falldown_100"]     = 0.0;
-      metrics_["win_pushout_100"]      = 0.0;
+      metrics_["win_interval"]     = 0.0;
+      metrics_["lose_interval"]    = 0.0;
+      metrics_["draw_interval"]    = 0.0;
+      metrics_["win_falldown_100"]      = 0.0;
+      metrics_["win_pushout_100"]       = 0.0;
       metrics_["lose_falldown_100"]     = 0.0;
       metrics_["lose_pushout_100"]      = 0.0;
-      metrics_["win_100"]          = 0.0;
-      metrics_["draw_100"]         = 0.0;
-      metrics_["lose_100"]         = 1.0;
+      metrics_["win_100"]          = 0.5;
+      metrics_["draw_100"]         = 0.5;
+      metrics_["lose_100"]         = 0.5;
     }
 
     void init() {}
