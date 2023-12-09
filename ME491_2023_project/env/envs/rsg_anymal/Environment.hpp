@@ -187,7 +187,6 @@ namespace raisim {
       auto curTime = std::chrono::high_resolution_clock::now();
 
       timer_ += 1;
-
       // std::cout << "Env L176" << std::endl;
 
       controller_.advance(&world_, action);
@@ -268,7 +267,11 @@ namespace raisim {
     /// function to see if the cube died
     bool cube_die() {
       /// get out of the cage
-      return cube_->getPosition().head(2).norm() > 3;
+      if(cube_->getPosition().head(2).norm() > 3){
+        terminalFactor_ = 2;
+        return true;
+      }
+      return false;
     }
 
     void processWin(){
@@ -281,11 +284,11 @@ namespace raisim {
 
       if(terminalFactor_ == 1){
         metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
-        metrics_["win_pushout_100"]  = metrics_["win_falldown_100"]*0.99+0.00;
+        metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
       }
       else{
         metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
-        metrics_["win_pushout_100"]  = metrics_["win_falldown_100"]*0.99+0.01;
+        metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
       }
     }
 
@@ -298,11 +301,11 @@ namespace raisim {
       metrics_["consecutive_wins"] = 0.0;
       if(terminalFactor_ == 1){
         metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
-        metrics_["lose_pushout_100"]  = metrics_["lose_falldown_100"]*0.99+0.00;
+        metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
       }
       else{
         metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
-        metrics_["lose_pushout_100"]  = metrics_["lose_falldown_100"]*0.99+0.01;
+        metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
       }
     }
 
@@ -320,6 +323,7 @@ namespace raisim {
       bool opponentDied;
       if(trainingMode_ == 0){opponentDied = cube_die();}
       else{opponentDied = player_die("OPPONENT");}
+      controller_.recordTerminal(&rewards_,0.0f); // need to flush the "terminal" reward for next cycle
 
       if (died && opponentDied) { // draw (same-time)
         winStreak_ = 0;
@@ -338,9 +342,17 @@ namespace raisim {
 
       if (!died && opponentDied) { // win
         winStreak_ += 1;
-        termialReward = terminalRewardWin_;
         processWin();
-        return true;
+
+        if(stabMode_){ // stability mode: win does NOT terminate episode! (actions before win needs to backprop to actions after)
+          controller_.recordTerminal(&rewards_,terminalRewardWin_*stabWinDecay_);
+          reset();
+          return false;
+        }
+        else {
+          termialReward = terminalRewardWin_;
+          return true;
+        }
       }
 
       if (died && !opponentDied) { // lose

@@ -4,7 +4,7 @@ from ME491_2023_project.helper.raisim_gym_helper import (
     ConfigurationSaver, load_param,load_param_selfplay, tensorboard_launcher)
 from ME491_2023_project.env.bin.rsg_anymal import NormalSampler
 from ME491_2023_project.env.bin.rsg_anymal import RaisimGymEnv
-from ME491_2023_project.env.RewardAnalyzer import RewardAnalyzer
+from ME491_2023_project.env.RewardMetricAnalyzer import RewardMetricAnalyzer
 import os
 import math
 import time
@@ -96,7 +96,7 @@ ppo = PPO.PPO(actor=actor,
               shuffle_batch=False,
               )
 
-reward_analyzer = RewardAnalyzer(env, ppo.writer)
+reward_analyzer = RewardMetricAnalyzer(env, ppo.writer)
 
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)

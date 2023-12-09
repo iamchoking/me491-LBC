@@ -5,7 +5,7 @@
 import numpy as np
 
 
-class RewardAnalyzer:
+class RewardMetricAnalyzer:
 
     def __init__(self, env, writer):
         reward_info = env.get_reward_info()
@@ -29,7 +29,7 @@ class RewardAnalyzer:
 
     def analyze_and_plot(self, step):
         self.data_mean /= self.data_size
-        data_std = np.sqrt((self.data_square_sum - self.data_size * self.data_mean * self.data_mean) / (self.data_size - 1 + 1e-16))
+        data_std = np.sqrt((self.data_square_sum - self.data_size * self.data_mean * self.data_mean) / (self.data_size + 1 + 1e-16))
 
         for data_id in range(len(self.data_tags)):
             self.writer.add_scalar(self.data_tags[data_id]+'/mean', self.data_mean[data_id], global_step=step)
@@ -42,4 +42,11 @@ class RewardAnalyzer:
         self.data_square_sum = np.zeros(shape=(len(self.data_tags), 1), dtype=np.double)
         self.data_min = np.inf * np.ones(shape=(len(self.data_tags), 1), dtype=np.double)
         self.data_max = -np.inf * np.ones(shape=(len(self.data_tags), 1), dtype=np.double)
+
+    def plot_metrics(self, env, step):
+        metric = env.get_metrics()
+        # print(metric)
+        # print("I DID IT")
+        for metric_tag in metric:
+            self.writer.add_scalar('_metric/'+metric_tag, metric[metric_tag], global_step=step)
 

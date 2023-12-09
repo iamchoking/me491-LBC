@@ -52,10 +52,12 @@ class Reward {
   }
 
   float sum() {
+    // std::cout << "Summing Rewards : " << std::endl;
     float sum = 0.f;
-    for(auto& rw: rewards_)
+    for(auto& rw: rewards_) {
       sum += rw.second.reward;
-
+      // std::cout << "  [" << rw.first << "] " << rw.second.reward << std::endl;
+    }
     return sum;
   }
 

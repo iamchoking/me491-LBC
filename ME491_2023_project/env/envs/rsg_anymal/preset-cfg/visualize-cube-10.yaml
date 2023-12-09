@@ -6,7 +6,9 @@ training:
 
 environment:
   render: True
-#  for training
+  plot_metric_n: 1
+
+  #  for training
 #  num_envs: 50
 #  eval_every_n: 30
 #  max_time: 10.01 # max_time larger than 10 is required to observe draws.
@@ -26,7 +28,10 @@ environment:
       coeff: 0.1   # !time and class must have exact opposite coeffs!
     time:
       coeff: -0.1  # !time and class must have exact opposite coeffs!
-
+    terminal: # used in stability training
+      coeff: 1.0
+    spin:
+      coeff: -1
 #    [STD]
 ##    PENALIZE
     slip:
@@ -42,9 +47,11 @@ environment:
     face:
       coeff: 0.6
     ram:
-      coeff: 1
+      coeff: 0.5
     center:
       coeff: 0
+    tbone:
+      coeff: 0.05
 
 
   reward_win: 10

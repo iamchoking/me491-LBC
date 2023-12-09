@@ -68,7 +68,16 @@ endif()
 # Check to see if the `python` command is present and from a virtual
 # environment, conda, or GHA activation - if it is, try to use that.
 
+#find_program(
+#        PYTHON_EXECUTABLE python
+#        PATHS "/home/hyungho/anaconda3/envs/raisim/bin" "/home/hyungho/anaconda3/envs/raisim/"
+#        NO_DEFAULT_PATH)
+#
+#set(PYTHON_EXECUTABLE "/home/hyungho/anaconda3/envs/raisim/bin") # this is fatal
+message(${PYTHON_EXECUTABLE})
+
 if(NOT DEFINED PYTHON_EXECUTABLE)
+  message("Let's find python!")
   if(DEFINED ENV{VIRTUAL_ENV})
     find_program(
       PYTHON_EXECUTABLE python

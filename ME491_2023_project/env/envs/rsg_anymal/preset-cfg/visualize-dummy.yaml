@@ -6,6 +6,8 @@ training:
 
 environment:
   render: True
+  plot_metric_n: 1
+
 #  for training
 #  num_envs: 50
 #  eval_every_n: 30
@@ -26,7 +28,8 @@ environment:
       coeff: 0.1   # !time and class must have exact opposite coeffs!
     time:
       coeff: -0.1  # !time and class must have exact opposite coeffs!
-
+    terminal: # used in stability training
+      coeff: 1.0
 #    [STD]
 ##    PENALIZE
     slip:
@@ -37,14 +40,18 @@ environment:
       coeff: -0.3
     edge:
       coeff: -0.3
+    spin:
+      coeff: -1
 
 #    PROMOTE
     face:
       coeff: 0.6
     ram:
-      coeff: 1
+      coeff: 0.5
     center:
       coeff: 0
+    tbone:
+      coeff: 0.05
 
 #        [FREE-FOR-ALL] (-> just win)
 ##        PENALIZE

@@ -4,7 +4,7 @@ from ME491_2023_project.helper.raisim_gym_helper import (
     ConfigurationSaver, load_param,load_param_selfplay, tensorboard_launcher)
 from ME491_2023_project.env.bin.rsg_anymal import NormalSampler
 from ME491_2023_project.env.bin.rsg_anymal import RaisimGymEnv
-from ME491_2023_project.env.RewardAnalyzer import RewardAnalyzer
+from ME491_2023_project.env.RewardMetricAnalyzer import RewardMetricAnalyzer
 import os
 import math
 import time
@@ -49,9 +49,9 @@ if cfg_name == '' or cfg_name == 'none':
     print("[RUNNER] No cfg file was given. Loading default from: "+task_path+"/cfg.yaml")
     cfg_path = task_path + "/cfg.yaml"
 else:
-    print("[RUNNER] Loading config: "+cfg_name)
     cfg_path = task_path + "/preset-cfg/"+cfg_name+".yaml"
 # print("[CHRIS] self-play start!! (runner l43)")
+print("[RUNNER] Loading config: "+cfg_path)
 cfg = YAML().load(open(cfg_path, 'r'))
 
 is_dummy = cfg['environment']['training_dummy_opponent']
@@ -107,7 +107,7 @@ opp_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], n
 
 
 saver = ConfigurationSaver(log_dir=home_path + "/ME491_2023_project/data/"+task_name,
-                           save_items=[task_path + "/cfg.yaml", task_path + "/runner.py", task_path + "/Environment.hpp", task_path + "/AnymalController_20190673.hpp"])
+                           save_items=[cfg_path, task_path + "/runner.py", task_path + "/Environment.hpp", task_path + "/AnymalController_20190673.hpp"])
 
 # logging
 
@@ -147,7 +147,7 @@ if starting_lr > 0: # reset the optimizer
     ppo.optimizer = torch.optim.Adam([*ppo.actor.parameters(), *ppo.critic.parameters()], lr=starting_lr)
     # self.optimizer = optim.Adam([*self.actor.parameters(), *self.critic.parameters()], lr=learning_rate)
 
-reward_analyzer = RewardAnalyzer(env, ppo.writer)
+analyzer = RewardMetricAnalyzer(env, ppo.writer)
 
 # if mode == 'retrain':
 #     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
@@ -166,6 +166,8 @@ def ppo_outer_loop(updates = 5000):
         reward_sum = 0
         done_sum = 0
         average_dones = 0.
+        if update % cfg['environment']['plot_metric_n'] == 0:
+            analyzer.plot_metrics(env,update)
 
         if (update % cfg['environment']['eval_every_n'] == 0 and update != 0) or cfg['environment']['eval_every_n'] == 1:
             gym_logger.info("[RUNNER] Visualizing and evaluating the current policy")
@@ -208,7 +210,7 @@ def ppo_outer_loop(updates = 5000):
                     # gym_logger.info("opp_action: " + str(opp_action.get_device()))
 
                     reward, dones = env.step(action, opp_action)
-                    reward_analyzer.add_reward_info(env.get_reward_info())
+                    analyzer.add_reward_info(env.get_reward_info())
                     frame_end = time.time()
                     wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
                     if wait_time > 0.:
@@ -218,7 +220,7 @@ def ppo_outer_loop(updates = 5000):
             gym_logger.info("[RUNNER] Video Logging Complete")
             env.turn_off_visualization()
 
-            reward_analyzer.analyze_and_plot(update)
+            analyzer.analyze_and_plot(update)
             env.reset()
             env.save_scaling(saver.data_dir, str(update))
             gym_logger.info("[RUNNER] Visualization Complete. Starting Iteration "+str(update))

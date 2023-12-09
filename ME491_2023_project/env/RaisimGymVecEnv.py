@@ -35,9 +35,10 @@ class RaisimGymVecEnv:
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
         self.rewards = [[] for _ in range(self.num_envs)]
+
+        self.metrics = [dict()]
+
         self.wrapper.setSeed(seed)
-
-
 
         # /// Scaling
         self.count = 0.0
@@ -132,7 +133,8 @@ class RaisimGymVecEnv:
         return self.wrapper.getRewardInfo()
 
     def get_metrics(self):
-        return self.wrapper.getMetrics()
+        self.metrics = self.wrapper.getMetrics()
+        return self.metrics.copy()
 
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
