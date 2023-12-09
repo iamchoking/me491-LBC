@@ -1,0 +1,34 @@
+reward:
+  time:
+    coeff: 0.0
+
+  terminal: # used in stability training
+    coeff: 1.0
+
+  #    [STD]
+  ##    PENALIZE
+  slip:
+    coeff: -0.8
+  flight:
+    coeff: -0.2
+  tilt:
+    coeff: -0.3
+  spin:
+    coeff: -0.5
+  edge:
+    coeff: -1
+
+  #    PROMOTE
+  face:
+    coeff: 0.6
+  ram:
+    coeff: 1
+  center:
+    coeff: 0
+  tbone:
+    coeff: 0.1
+
+reward_win:              100
+reward_lose:             -100
+reward_draw_win :        -50
+reward_draw_lose:        -50

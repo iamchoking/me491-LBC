@@ -1,0 +1,12 @@
+training_mode:           1 #0: cube, 1: self-train
+training_init_shuffle:   True
+training_dummy_opponent: True
+
+curriculum_mass_start:   16
+curriculum_win_streak:   10
+curriculum_mass_incr:    0.1
+curriculum_cube_shuffle: True
+
+stability_mode:          True
+stability_teleport:      2.0
+stability_win_decay:     0.9

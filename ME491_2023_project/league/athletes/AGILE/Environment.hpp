@@ -142,6 +142,7 @@ namespace raisim {
         else{controller_.reset(&world_, theta,trainingShuffleInit_);}
         opponentController_.reset(&world_, theta,trainingShuffleInit_);
       }
+      state_ = 0;
       timer_ = 0;
     }
 
@@ -278,49 +279,49 @@ namespace raisim {
       return false;
     }
 
-    // void processWin(){
-    //   // metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
-    //   // timeLastWin_ = world_.getWorldTime();
-    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
-    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
-    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
-    //   // metrics_["consecutive_wins"] += 1.0;
-    //   //
-    //   // if(terminalFactor_ == 1){
-    //   //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
-    //   //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
-    //   // }
-    //   // else{
-    //   //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
-    //   //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
-    //   // }
-    // }
+    void processWin(){
+      // metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
+      // timeLastWin_ = world_.getWorldTime();
+      // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
+      // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+      // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+      // metrics_["consecutive_wins"] += 1.0;
+      //
+      // if(terminalFactor_ == 1){
+      //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
+      //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
+      // }
+      // else{
+      //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
+      //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
+      // }
+    }
 
-    // void processLose(){
-    //   // metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
-    //   // timeLastLose_ = world_.getWorldTime();
-    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
-    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
-    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
-    //   // metrics_["consecutive_wins"] = 0.0;
-    //   // if(terminalFactor_ == 1){
-    //   //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
-    //   //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
-    //   // }
-    //   // else{
-    //   //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
-    //   //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
-    //   // }
-    // }
+    void processLose(){
+      // metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
+      // timeLastLose_ = world_.getWorldTime();
+      // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+      // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
+      // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+      // metrics_["consecutive_wins"] = 0.0;
+      // if(terminalFactor_ == 1){
+      //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
+      //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
+      // }
+      // else{
+      //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
+      //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
+      // }
+    }
 
-    // void processDraw(){
-    //   // metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
-    //   // timeLastDraw_ = world_.getWorldTime();
-    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
-    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
-    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
-    //   // metrics_["consecutive_wins"] = 0.0;
-    // }
+    void processDraw(){
+      // metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
+      // timeLastDraw_ = world_.getWorldTime();
+      // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+      // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+      // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
+      // metrics_["consecutive_wins"] = 0.0;
+    }
 
     void handleDraw(){
       Vec<3> robotPos,opponentPos;
@@ -431,8 +432,8 @@ namespace raisim {
 
       terminalReward = handleTerminal();
       processMetrics();
-      if(( (state_ == 1) && (!stabMode_) ) || (state_ == 2) || (state_ == 3) || (state_ == 4)){state_=0;return true;}
-      else {state_ = 0;return false;}
+      if(( (state_ == 1) && (!stabMode_) ) || (state_ == 2) || (state_ == 3) || (state_ == 4)){return true;}
+      else {return false;}
     }
 
     void curriculumUpdate() {
