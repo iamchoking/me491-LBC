@@ -41,8 +41,11 @@ namespace raisim {
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
-      READ_YAML(int   , trainingMode_         , cfg["training_mode"]);
-      READ_YAML(bool  , trainingShuffleInit_  , cfg["training_init_shuffle"]);
+      READ_YAML(int   , trainingMode_                        , cfg["training_mode"]);
+      READ_YAML(bool  , trainingShuffleInitPos_              , cfg["training_init_shuffle_position"]);
+      READ_YAML(bool  , trainingShuffleInitHeading_          , cfg["training_init_shuffle_player_heading"]);
+      READ_YAML(bool  , trainingShuffleInitOpponentHeading_  , cfg["training_init_shuffle_opponent_heading"]);
+
       READ_YAML(bool  , trainingDummyOpponent_, cfg["training_dummy_opponent"]);
 
       if(trainingMode_ == 0) {
@@ -77,7 +80,9 @@ namespace raisim {
       rewards_.initializeFromConfigurationFile (cfg["reward"]);
       READ_YAML(float, terminalRewardWin_ , cfg["reward_win" ]);
       READ_YAML(float, terminalRewardLose_, cfg["reward_lose"]);
-      READ_YAML(float, terminalRewardDraw_, cfg["reward_draw"]);
+      READ_YAML(float, terminalRewardDrawWin_, cfg["reward_draw_win"]);
+      READ_YAML(float, terminalRewardDrawLose_, cfg["reward_draw_lose"]);
+
 
       /// Curriculum Parameters
       READ_YAML(int   , currWinStreak_, cfg["curriculum_win_streak"]);
@@ -90,12 +95,12 @@ namespace raisim {
       }
 
       /// Stability Training Params
-      float stabCubeTime;
-      READ_YAML(float, stabCubeTime    ,  cfg["stability_cube_teleport"]);
+      float stabTeleportTime;
+      READ_YAML(float, stabTeleportTime    ,  cfg["stability_teleport"]);
       READ_YAML(float, stabWinDecay_   ,  cfg["stability_win_decay"]);
       READ_YAML(bool , stabMode_       ,  cfg["stability_mode"]);
-      if(stabCubeTime <= 0.0){stabCubeSteps_ = 1000000;}
-      else{stabCubeSteps_ = int(stabCubeTime/control_dt_);}
+      if(stabTeleportTime <= 0.0){stabTeleportSteps_ = 1000000;}
+      else{stabTeleportSteps_ = int(stabTeleportTime/control_dt_);}
 
       /// visualize if it is the first environment
       if (visualizable_) {
@@ -111,17 +116,18 @@ namespace raisim {
       }
 
       metrics_["cube_weight"]      = 0.0;
-      metrics_["consecutive_wins"] = 0.0;
-      metrics_["win_interval"]    = 0.0;
-      metrics_["lose_interval"]   = 0.0;
-      metrics_["draw_interval"]   = 0.0;
-      metrics_["win_falldown_100"]     = 0.0;
-      metrics_["win_pushout_100"]      = 0.0;
+      metrics_["win_consecutive"] = 0.0;
+      metrics_["interval_win"]     = 0.0;
+      metrics_["interval_lose"]    = 0.0;
+      metrics_["interval_draw"]    = 0.0;
+      metrics_["win_falldown_100"]      = 0.0;
+      metrics_["win_pushout_100"]       = 0.0;
       metrics_["lose_falldown_100"]     = 0.0;
       metrics_["lose_pushout_100"]      = 0.0;
-      metrics_["win_100"]          = 0.0;
-      metrics_["draw_100"]         = 0.0;
-      metrics_["lose_100"]         = 1.0;
+      metrics_["100_win"]          = 0.5;
+      metrics_["100_draw"]         = 0.5;
+      metrics_["100_lose"]         = 0.5;
+      metrics_["score"]            = 0.0;
     }
 
     void init() {}
@@ -131,16 +137,13 @@ namespace raisim {
 
       if(trainingMode_ == 0){
         if(stabMode_ && winStreak_ > 0){}
-        else{controller_.reset(&world_, theta,trainingShuffleInit_);}
+        else{controller_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitHeading_);}
         reset_cube();
       }
       else {
-        // std::cout << "Env L87" << std::endl;
-        controller_.reset(&world_, theta,trainingShuffleInit_);
-        // std::cout << "Env L90" << std::endl;
-
-        opponentController_.reset(&world_, theta,trainingShuffleInit_);
-        // std::cout << "Env L93" << std::endl;
+        if(stabMode_ && winStreak_ > 0){}
+        else{controller_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitHeading_);}
+        opponentController_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitOpponentHeading_);
       }
       timer_ = 0;
     }
@@ -219,7 +222,10 @@ namespace raisim {
       if(visualizable_ && TIME_VERBOSE){std::cout << "[STEP] record reward for controller : " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << std::endl;}
       curTime = std::chrono::high_resolution_clock::now();
 
-      if((trainingMode_ == 0) && stabMode_ && timer_ % stabCubeSteps_ == 0){reset_cube();}
+      if(stabMode_ && timer_ % stabTeleportSteps_ == 0){
+        if(trainingMode_ == 0){reset_cube();}
+        else{opponentController_.reset(&world_, 0,trainingShuffleInitPos_,trainingShuffleInitOpponentHeading_);}
+      }
 
       if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
       return rewards_.sum();
@@ -275,94 +281,182 @@ namespace raisim {
       return false;
     }
 
-    void processWin(){
-      metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
-      timeLastWin_ = world_.getWorldTime();
-      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
-      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
-      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
-      metrics_["consecutive_wins"] += 1.0;
+    // void processWin(){
+    //   // metrics_["interval_win"] = world_.getWorldTime() - timeLastWin_;
+    //   // timeLastWin_ = world_.getWorldTime();
+    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.01;
+    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
+    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
+    //   // metrics_["win_consecutive"] += 1.0;
+    //   //
+    //   // if(terminalFactor_ == 1){
+    //   //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
+    //   //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
+    //   // }
+    //   // else{
+    //   //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
+    //   //   metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
+    //   // }
+    // }
 
-      if(terminalFactor_ == 1){
-        metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
-        metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
-      }
-      else{
-        metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
-        metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
+    // void processLose(){
+    //   // metrics_["interval_lose"] = world_.getWorldTime() - timeLastLose_;
+    //   // timeLastLose_ = world_.getWorldTime();
+    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
+    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.01;
+    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
+    //   // metrics_["win_consecutive"] = 0.0;
+    //   // if(terminalFactor_ == 1){
+    //   //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
+    //   //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
+    //   // }
+    //   // else{
+    //   //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
+    //   //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
+    //   // }
+    // }
+
+    // void processDraw(){
+    //   // metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+    //   // timeLastDraw_ = world_.getWorldTime();
+    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
+    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
+    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
+    //   // metrics_["win_consecutive"] = 0.0;
+    // }
+
+    void handleDraw(){
+      Vec<3> robotPos,opponentPos;
+      robot_->getPosition(0,robotPos);
+      if(trainingMode_ == 0){cube_->getPosition(opponentPos);}
+      else{opponent_->getPosition(0,opponentPos);}
+      if(robotPos.e().head(2).norm() < opponentPos.e().head(2).norm()){state_ = 3;}
+      else{state_ = 4;}
+    }
+
+    void processMetrics(){
+      switch (state_) {
+        case 1: // win
+          // std::cout << "Processing Metrics for Win... " << std::endl;
+          metrics_["score"] += 1.0;
+          metrics_["interval_win"] = world_.getWorldTime() - timeLastWin_;
+          timeLastWin_ = world_.getWorldTime();
+          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.01;
+          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
+          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
+          metrics_["win_consecutive"] += 1.0;
+
+          if(terminalFactor_ == 1){
+            metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
+            metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.00;
+          }
+          else{
+            metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.00;
+            metrics_["win_pushout_100"]  = metrics_["win_pushout_100"]*0.99+0.01;
+          }
+          return;
+        case 2: // lose
+          // std::cout << "Processing Metrics for Loss... " << std::endl;
+          metrics_["score"] -= 1.0;
+          metrics_["interval_lose"] = world_.getWorldTime() - timeLastLose_;
+          timeLastLose_ = world_.getWorldTime();
+          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
+          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.01;
+          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
+          metrics_["win_consecutive"] = 0.0;
+          if(terminalFactor_ == 1){
+            metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
+            metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
+          }
+          else{
+            metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
+            metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
+          }
+          return;
+        case 3: // draw-win
+          // std::cout << "Processing Metrics for Draw Win... " << std::endl;
+
+          metrics_["score"] += 0.01;
+          metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+          timeLastDraw_ = world_.getWorldTime();
+          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.003; //draw-win is about 0.3 win (can be a strat)
+          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
+          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
+          metrics_["win_consecutive"] = 0.0;
+          return;
+        case 4: // draw-lose
+          // std::cout << "Processing Metrics for Draw Loss... " << std::endl;
+
+          metrics_["score"] -= 0.01;
+          metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+          timeLastDraw_ = world_.getWorldTime();
+          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
+          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.0001; //draw-loss is about 0.01 loss
+          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
+          metrics_["win_consecutive"] = 0.0;
+          return;
       }
     }
 
-    void processLose(){
-      metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
-      timeLastLose_ = world_.getWorldTime();
-      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
-      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
-      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
-      metrics_["consecutive_wins"] = 0.0;
-      if(terminalFactor_ == 1){
-        metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
-        metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
+    float handleTerminal(){
+      switch (state_) {
+        case 0: // nothing happened
+          return 0.0f;
+        case 1: // win
+          winStreak_ += 1;
+          if(stabMode_){ // stability mode: win does NOT terminate episode! (actions before win needs to backprop to actions after)
+            controller_.recordTerminal(&rewards_,terminalRewardWin_*stabWinDecay_); // positive rew is given as non-terminal rew
+            reset(); // reset is triggered here instead (doesn't reset controller_)
+            return 0.0f;
+          }
+          else {return terminalRewardWin_;}
+        case 2: // lose
+          winStreak_ = 0;
+          return terminalRewardLose_;
+        case 3: // draw-win
+          terminalFactor_ = 0;
+          winStreak_ = 0;
+          return terminalRewardDrawWin_;
+        case 4: // draw-lose
+          terminalFactor_ = 0;
+          winStreak_ = 0;
+          return terminalRewardDrawLose_;
       }
-      else{
-        metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.00;
-        metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.01;
-      }
+      RSFATAL("[ENV] INVALID STATE DETECTED!")
+      return -1.0;
     }
 
-    void processDraw(){
-      metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
-      timeLastDraw_ = world_.getWorldTime();
-      metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
-      metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
-      metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
-      metrics_["consecutive_wins"] = 0.0;
-    }
-
-    bool isTerminalState(float &termialReward) {  // this terminalReward is passed to PPO
+    bool isTerminalState(float &terminalReward) {  // this terminalReward is passed to PPO
       auto died = player_die(PLAYER_NAME);
       bool opponentDied;
       if(trainingMode_ == 0){opponentDied = cube_die();}
       else{opponentDied = player_die("OPPONENT");}
       controller_.recordTerminal(&rewards_,0.0f); // need to flush the "terminal" reward for next cycle
 
-      if (died && opponentDied) { // draw (same-time)
-        winStreak_ = 0;
-        termialReward = terminalRewardDraw_;
-        processDraw();
-        return true;
-      }
+      // draw
+      if(timer_ > 10*100 || (died && opponentDied)) {handleDraw();}
 
-      if (timer_ > 10 * 100) { // draw (timeout)
-        terminalFactor_ = 0;
-        winStreak_ = 0;
-        termialReward = terminalRewardDraw_;
-        processDraw();
-        return true;
-      }
+      // win
+      if (!died && opponentDied) {state_ = 1;}
 
-      if (!died && opponentDied) { // win
-        winStreak_ += 1;
-        processWin();
+      // lose
+      if (died && !opponentDied) {state_ = 2;}
 
-        if(stabMode_){ // stability mode: win does NOT terminate episode! (actions before win needs to backprop to actions after)
-          controller_.recordTerminal(&rewards_,terminalRewardWin_*stabWinDecay_);
-          reset();
-          return false;
-        }
-        else {
-          termialReward = terminalRewardWin_;
-          return true;
-        }
+      terminalReward = handleTerminal();
+      processMetrics();
+      // if(state_ != 0) {
+      //   std::cout << "Terminal State : " << state_ << " Recorded. (1: win, 2: lose, 3: dwin, 4: dlose)" << std::endl;
+      //   std::cout << "Terminal Factor: " << terminalFactor_ << " (0: timeout, 1: pushout, 2: falldown)" << std::endl;
+      //   std::cout << "Metrics: " << std::endl;
+      //   for (const auto& pair : metrics_) {
+      //     std::cout << "Key: " << pair.first << ", Value: " << pair.second << std::endl;
+      //   }
+      //   std::cout << std::endl;
+      // }
+      if(( (state_ == 1) && (!stabMode_) ) || (state_ == 2) || (state_ == 3) || (state_ == 4)){
+        state_=0;return true;
       }
-
-      if (died && !opponentDied) { // lose
-        winStreak_ = 0;
-        termialReward = terminalRewardLose_;
-        processLose();
-        return true;
-      }
-      return false;
+      else {state_ = 0;return false;}
     }
 
     void curriculumUpdate() {
@@ -435,28 +529,31 @@ namespace raisim {
 
   private:
     int timer_ = 0;
-    int winStreak_ = 0;
 
     bool visualizable_ = false;
     bool doPrint_ = false;
 
     double cubeMass_ = 0.5;
 
+    int state_ = 0; // 0: non-terminal, 1: win, 2: lose, 3: draw-win, 4: draw-lose
+
     int trainingMode_;
     bool trainingDummyOpponent_;
-    bool trainingShuffleInit_;
+    bool trainingShuffleInitPos_,trainingShuffleInitHeading_,trainingShuffleInitOpponentHeading_;
 
+    int winStreak_ = 0;
     int currWinStreak_;
     double currMassIncr_;
     bool cubeShuffle_;
 
     bool stabMode_;
-    int stabCubeSteps_;
+    int stabTeleportSteps_;
     float stabWinDecay_;
 
     float terminalRewardWin_ ;
     float terminalRewardLose_;
-    float terminalRewardDraw_;
+    float terminalRewardDrawWin_;
+    float terminalRewardDrawLose_;
 
     TRAINING_CONTROLLER controller_;
     TRAINING_CONTROLLER opponentController_;

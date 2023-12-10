@@ -25,14 +25,18 @@ class Game:
                  rules="vanilla",
                  reward="ffa",
                  stride="fine",
-                 viz_only=False
+                 viz_only=False,
+                 no_viz  =False,
+                 new_name_bare=None,
+                 logger=None
                  ):
+        self.viz_only = viz_only
         self.task_dir = os.path.dirname(os.path.realpath(__file__))
         self.home_dir = self.task_dir.rsplit("/", 4)[0]
         self.league_dir = self.home_dir + "/ME491_2023_project/league"
         if cfg is None:
-            print("[GAME] No [cfg.yaml] Provided! Using default target : ")
-            self.cfg = YAML().load(open(self.league_dir + "/default_cfg.yaml", "r"))
+            print("[GAME] No [cfg.yaml] Provided! Using default cfg : ")
+            self.cfg = YAML().load(open(self.league_dir + "/configs/vanilla.yaml", "r"))
         else:
             self.cfg = cfg
         if targ_path is None:
@@ -48,7 +52,11 @@ class Game:
 
         self.timestr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        self.targ_name = self.targ_path.rsplit('/', 1)[1].rsplit('_', 1)[0]
+        if new_name_bare is None:
+            self.targ_name = self.targ_path.rsplit('/', 1)[1].rsplit('_', 1)[0]
+        else:
+            self.targ_name = 'x0'+new_name_bare
+
         self.targ_dir = self.targ_path.rsplit('/', 1)[0]
         self.targ_iter = int(self.targ_path.rsplit('_', 1)[1].rsplit('.', 1)[0])
 
@@ -69,22 +77,31 @@ class Game:
         os.makedirs(self.game_dir)
 
         # initialize logging
-        self.logger = logging.getLogger(__name__)
+        if logger is None:
+            self.logger = logging.getLogger(__name__)
 
-        f_handler = logging.FileHandler(self.game_dir + '/log.txt')
-        # c_handler = logging.StreamHandler()
+            f_handler = logging.FileHandler(self.game_dir + '/log.txt')
+            c_handler = logging.StreamHandler()
 
-        self.logger.setLevel(logging.DEBUG)
-        f_handler.setLevel(logging.DEBUG)
-        # c_handler.setLevel(logging.DEBUG)
+            self.logger.setLevel(logging.DEBUG)
+            f_handler.setLevel(logging.DEBUG)
+            c_handler.setLevel(logging.DEBUG)
 
-        f_handler.setFormatter(logging.Formatter('[%(levelname)s::%(asctime)s] %(message)s'))
-        # c_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+            f_handler.setFormatter(logging.Formatter('[%(levelname)s::%(asctime)s] %(message)s'))
+            c_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
 
-        self.logger.addHandler(f_handler)
-        # self.logger.addHandler(c_handler)
+            self.logger.addHandler(f_handler)
+            self.logger.addHandler(c_handler)
+        else:
+            self.logger = logger
+            self.logger.setLevel(logging.DEBUG)
 
-        self.targ_ver = 0
+            f_handler = logging.FileHandler(self.game_dir + '/log.txt')
+            f_handler.setFormatter(logging.Formatter('[%(levelname)s::%(asctime)s] %(message)s'))
+            self.logger.addHandler(f_handler)
+
+
+        self.targ_ver = 00
         try:
             self.targ_ver = int(self.targ_name[1])
         except ValueError:
@@ -116,6 +133,9 @@ class Game:
         self.logger.info("[READY] Preprocessing COMPLETE")
 
         # create cpp simulation environment
+        if no_viz:
+            self.cfg['environment']['render'] = False
+
         self.env = VecEnv(RaisimGymEnv(self.home_dir + "/rsc", dump(self.cfg['environment'], Dumper=RoundTripDumper)))
         self.env.seed(self.cfg['seed'])
 
@@ -183,7 +203,7 @@ class Game:
         self.env.load_scaling(dir_name=self.targ_dir, iteration=self.targ_iter, opp_dir_name=self.opp_dir,
                               opp_iteration=self.opp_iter)
 
-        tensorboard_launcher(self.game_dir, False)
+        # tensorboard_launcher(self.game_dir+"/..", False)
 
         if self.cfg['learning']['lr'] > 0:  # reset the optimizer
             self.logger.info("[PPO] Replacing Optimizer With Learning Rate: " + str(self.cfg['learning']['lr']))
@@ -198,12 +218,17 @@ class Game:
 
         self.env.turn_off_visualization()
 
+        self.logger.info("[GAME] Game for " + self.targ_name + "(version" + str(self.targ_ver) + ") ready!")
+        self.logger.info("     Opponent: " + self.opp_path)
+        self.logger.info("     Config : \n" + str(self.cfg))
+        self.logger.info("[GAME] Here we go!!")
+
     def save_target(self, to_dir=None, name=None):
         if to_dir is None:
             to_dir = self.game_dir
         if name is None:
-            name = "full"
-        self.logger.info("[EVAL] Evaluating the current game : " + self.name)
+            name = self.targ_name
+        self.logger.info("[SAVE] Saving the current game : " + self.name)
 
         dest_path = to_dir + "/" + name + "_" + str(self.targ_iter) + '.pt'
 
@@ -219,24 +244,23 @@ class Game:
 
         return dest_path
 
-    def evaluate(self, eval_steps=-1, visualize=True, do_save=True):
+    def evaluate(self, eval_steps=-1, visualize=True):
         if eval_steps == -1:
             eval_steps = self.n_steps
 
-        if do_save:
-            save_path = self.save_target()
-            # to check save/load, create the evaluation graph from saved file
-            loaded_graph = ppo_module.MLP(self.cfg['architecture']['policy_net'], nn.LeakyReLU, self.targ_ob_dim,
-                                          self.targ_act_dim)
-            loaded_graph.load_state_dict(torch.load(save_path)['actor_architecture_state_dict'])
-        else:
-            loaded_graph = self.targ_ppo.actor.architecture
+        save_path = self.save_target()
+        # to check save/load, create the evaluation graph from saved file
+        loaded_graph = ppo_module.MLP(self.cfg['architecture']['policy_net'], nn.LeakyReLU, self.targ_ob_dim,
+                                      self.targ_act_dim)
+        loaded_graph.load_state_dict(torch.load(save_path)['actor_architecture_state_dict'])
 
         if visualize:
             self.logger.info("[EVAL-VIZ] Visualization ON")
             self.env.turn_on_visualization()
-            self.env.start_video_recording(
-                self.game_dir + "__" + self.timestr + "_update-" + str(self.update_num) + '.mp4')
+            if self.viz_only:
+                self.env.start_video_recording(self.timestr + self.name + '.mp4')
+            else:
+                self.env.start_video_recording(self.timestr + "_" + self.name + "_update-" + str(self.update_num) + '.mp4')
 
         for frame in range(eval_steps):  # visualization (dry) run
             with torch.no_grad():
@@ -272,18 +296,42 @@ class Game:
         self.logger.info(
             '[EVAL-SAVE] Update #' + str(self.update_num) + '( Iteration #' + str(self.targ_iter) + ') Saved.')
 
-    def ppo_outer_loop(self, updates=5000):
-        for update in range(updates):  # TODO: implement max updates
+    def ppo_outer_loop(self, updates=5000, do_viz=True):
+
+        # flow: update (with periodic evals) -> finish
+        if not do_viz:
+            self.logger.warning("[GAME] This game was called with no visualization!!")
+
+        for update in range(updates): # TODO implement (keyboard interrupt)
 
             do_update = update % self.cfg['environment']['eval_every_n'] == 0 and update != 0
             if do_update or self.cfg['environment']['eval_every_n'] == 1:
-                self.evaluate()
+                self.evaluate(visualize=do_viz)
                 self.logger.info("[GAME-OUTER] Evaluation Complete. Starting Update # " + str(self.update_num))
 
             self.ppo_training_update()
 
             self.update_num += 1
+            self.targ_iter += 1
 
+            # stopping conditions
+            metrics = self.env.get_metrics()
+            if metrics['100_win'] > 0.8:
+                self.logger.info("[GAME-OUTER][WIN] Game session finished (win-rate exceeds 0.8)")
+                break
+            # too much gap in power
+            elif metrics['score'] > 50 and self.update_num < 200:
+                self.logger.info("[GAME-OUTER][TRIVIAL] Game Session finished (score quickly exceeds 50)")
+                break
+            if update == updates - 1:
+                self.logger.info("[GAME-OUTER][FINISH] Game session finished (max-updates reached)")
+                break
+
+        fin_path = self.finish()
+        self.logger.info("[GAME-FINISH] Game Concluded. Final result saved at ["+fin_path+"]")
+        return fin_path
+
+    # one update step for PPO training
     def ppo_training_update(self):
         device = self.device
 
@@ -315,8 +363,8 @@ class Game:
             cur_time = time.time()
 
             action = ppo.act(obs)
-            # opp_action = opp_mlp.architecture(torch.from_numpy(opp_obs).cpu()).detach().numpy()
-            opp_action = opp_mlp.architecture(obs)
+            opp_action = opp_mlp.architecture(torch.from_numpy(opp_obs).cpu()).detach().numpy()
+            # opp_action = opp_mlp.architecture(torch.from_numpy(opp_obs).cpu()).cpu().detach().numpy()
 
             t_action += time.time() - cur_time
             cur_time = time.time()
@@ -356,10 +404,11 @@ class Game:
                 "average_T_per_episode": average_dones * total_steps / self.env.num_envs,
             })
             self.analyzer.plot_metrics(self.env, self.update_num)
+            self.logger.info("[PLOT] Metrics Plotted")
 
         end = time.time()
 
-        self.logger.info('[UPDATE-#{:>6}]----------{:>30}'.format(self.update_num, self.game_dir.split('/')[-1]))
+        self.logger.info('[UPDATE-#{:>6}] {:>30}'.format(self.update_num, self.game_dir.split('/')[-1]))
         self.logger.info('<Learning>')
         self.logger.info('{:<40} {:>6}'.format("average ll reward: ", '{:0.10f}'.format(average_ll_performance)))
         self.logger.info(
@@ -384,6 +433,42 @@ class Game:
                                      (t_observe, t_action, t_envstep, t_ppostep, t_summing, t_backprop))))
         self.logger.info('--------------------------------------------------------\n')
 
+    # save the current version in the database
+    def finish(self):
+        # plot metrics for the final point
+        self.analyzer.plot_metrics(self.env, self.update_num)
+        if self.env.get_metrics()['100_win'] < 0.5:
+            self.logger.warning('Final winrate does not exceed half after finish (may be non-optimal)!')
+
+        if self.update_num < 3:
+            self.logger.warning("Too few updates. This game will not be recorded as a version.")
+            return self.targ_path
+        name_bare = self.targ_name[2:]
+        finish_dir = self.league_dir + "/athletes/" + name_bare
+
+        # save to game_dir just in case
+        self.save_target()
+
+        final_path = self.save_target(finish_dir,'x'+str(self.targ_ver+1) + name_bare)
+
+        copy_files([self.task_dir + "/league_game.py", self.task_dir + "/Environment.hpp",
+                    self.task_dir + "/AnymalController_20190673.hpp"], finish_dir)
+
+        # TODO placholder
+        self.cfg['training record'] = self.timestr
+
+        final_cfg_path = finish_dir+"/cfg_x"+ str(self.targ_ver) + "-x" + str(self.targ_ver+1) + "_" + self.name + ".yaml"
+        YAML().dump(self.cfg,open(final_cfg_path,'w'))
+
+        # TODO do some logging and stuff (profile.yaml and stuff)
+
+        self.targ_ver += 1
+
+        return final_path
+
+    def end(self):
+        self.logger.handlers = []
+        self.env.close()
 
 if __name__ == "__main__":  # TODO parse args and start training (+ catch keyboard interrupts)
     # configuration
@@ -394,6 +479,8 @@ if __name__ == "__main__":  # TODO parse args and start training (+ catch keyboa
     parser.add_argument('-k', '--kl', help='desired kl divergence (how much stride is desired)', type=float, default=-1)
     parser.add_argument('-c', '--config', help='config file path', type=str, default='')
     parser.add_argument('-v', '--visualize', help='just visualize without training', type=bool, default=False)
+    parser.add_argument('-n', '--newname', help='come up with a new name for an athlete',type=str,default='')
+    parser.add_argument('-u','--updates', help='max number of updates',type=int,default=750)
     args = parser.parse_args()
 
     main_targ_path = args.target
@@ -402,6 +489,8 @@ if __name__ == "__main__":  # TODO parse args and start training (+ catch keyboa
     main_cfg_path = args.config
     main_prescribed_kl = args.kl
     main_do_visualize = args.visualize
+    main_newname = args.newname
+    main_updates = args.updates
 
     if main_cfg_path == '':
         main_cfg_path = "ME491_2023_project/league/default_cfg.yaml"
@@ -418,7 +507,14 @@ if __name__ == "__main__":  # TODO parse args and start training (+ catch keyboa
         main_cfg['environment']['max_time'] = 100
         print('[VIS-ONLY] Simple Visualization Mode')
         game = Game(main_cfg, main_targ_path, main_opp_path, 'main', 'exec', 'game', True)
-        game.evaluate(do_save=True)
+        game.evaluate()
     else:
-        game = Game(main_cfg, main_targ_path, main_opp_path, 'main', 'exec', 'game')
-        game.ppo_outer_loop(5000)
+        # adding a new name
+        if main_newname != '':
+            game = Game(main_cfg, main_targ_path, main_opp_path, 'main', 'exec', 'game',new_name_bare=main_newname)
+        else:
+            game = Game(main_cfg, main_targ_path, main_opp_path, 'main', 'exec', 'game')
+        # given my experience, 750 iters is a good place to stop (if you're poor on resources)
+        game.ppo_outer_loop(main_updates)
+
+
