@@ -41,8 +41,11 @@ namespace raisim {
       controller_.setName(PLAYER_NAME);
       robot_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
-      READ_YAML(int   , trainingMode_         , cfg["training_mode"]);
-      READ_YAML(bool  , trainingShuffleInit_  , cfg["training_init_shuffle"]);
+      READ_YAML(int   , trainingMode_                        , cfg["training_mode"]);
+      READ_YAML(bool  , trainingShuffleInitPos_              , cfg["training_init_shuffle_position"]);
+      READ_YAML(bool  , trainingShuffleInitHeading_          , cfg["training_init_shuffle_player_heading"]);
+      READ_YAML(bool  , trainingShuffleInitOpponentHeading_  , cfg["training_init_shuffle_opponent_heading"]);
+
       READ_YAML(bool  , trainingDummyOpponent_, cfg["training_dummy_opponent"]);
 
       if(trainingMode_ == 0) {
@@ -134,13 +137,13 @@ namespace raisim {
 
       if(trainingMode_ == 0){
         if(stabMode_ && winStreak_ > 0){}
-        else{controller_.reset(&world_, theta,trainingShuffleInit_);}
+        else{controller_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitHeading_);}
         reset_cube();
       }
       else {
         if(stabMode_ && winStreak_ > 0){}
-        else{controller_.reset(&world_, theta,trainingShuffleInit_);}
-        opponentController_.reset(&world_, theta,trainingShuffleInit_);
+        else{controller_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitHeading_);}
+        opponentController_.reset(&world_, theta,trainingShuffleInitPos_,trainingShuffleInitOpponentHeading_);
       }
       timer_ = 0;
     }
@@ -221,7 +224,7 @@ namespace raisim {
 
       if(stabMode_ && timer_ % stabTeleportSteps_ == 0){
         if(trainingMode_ == 0){reset_cube();}
-        else{opponentController_.reset(&world_, 0,trainingShuffleInit_);}
+        else{opponentController_.reset(&world_, 0,trainingShuffleInitPos_,trainingShuffleInitOpponentHeading_);}
       }
 
       if(doPrint_){controller_.printStatus(&world_);} // when visualizing, also print some stuff
@@ -515,7 +518,7 @@ namespace raisim {
 
     int trainingMode_;
     bool trainingDummyOpponent_;
-    bool trainingShuffleInit_;
+    bool trainingShuffleInitPos_,trainingShuffleInitHeading_,trainingShuffleInitOpponentHeading_;
 
     int winStreak_ = 0;
     int currWinStreak_;

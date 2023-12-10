@@ -56,9 +56,9 @@ environment:
   reward_draw_win :        -50
   reward_draw_lose:        -50
 
-  training_mode:           0 #0: cube, 1: self-train
+  training_mode:           1 #0: cube, 1: self-train
   training_init_shuffle:   True
-  training_dummy_opponent: False
+  training_dummy_opponent: True
 
   curriculum_mass_start:   0.5
   curriculum_win_streak:   10

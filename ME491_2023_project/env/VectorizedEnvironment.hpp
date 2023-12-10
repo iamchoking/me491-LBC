@@ -138,9 +138,9 @@ namespace raisim {
       opponentMean = opponentObMean_; opponentVar = opponentObVar_; opponentObCount_ = opponentCount;
     }
 
-    void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count,Eigen::Ref<EigenVec> &opponentMean, Eigen::Ref<EigenVec> &opponentVar,float opponentCount) {
+    void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count,Eigen::Ref<EigenVec> &opponentMean, Eigen::Ref<EigenVec> &opponentVar,float &opponentCount) {
       obMean_ = mean; obVar_ = var; obCount_ = count;
-      opponentObMean_ = mean; opponentObVar_ = opponentVar; opponentObCount_ = opponentCount;
+      opponentObMean_ = opponentMean; opponentObVar_ = opponentVar; opponentObCount_ = opponentCount; // there was a typo here. that almost got me insane
     }
 
     void setSeed(int seed) {
@@ -218,7 +218,21 @@ namespace raisim {
     }
 
   private:
-    void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,Eigen::Ref<EigenRowMajorMat> opponentOb,bool updateStatistics) {
+    void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,Eigen::Ref<EigenRowMajorMat> &opponentOb,bool updateStatistics) {
+
+      // std::cout << "recieved stats (player)" << std::endl;
+      // std::cout << "mean    : " << obMean_   << std::endl;
+      // std::cout << "var     : " << obVar_    << std::endl;
+      // std::cout << "count   : " << obCount_  << std::endl;
+      // std::cout << "epsilon : " << epsilon_  << std::endl;
+      //
+      // std::cout << "recieved stats (opponent)" << std::endl;
+      // std::cout << "mean    : " << opponentObMean_   << std::endl;
+      // std::cout << "var     : " << opponentObVar_    << std::endl;
+      // std::cout << "count   : " << opponentObCount_  << std::endl;
+      // std::cout << "epsilon : " << opponentEpsilon_  << std::endl;
+
+
       if (updateStatistics) {
         ///PLAYER
         recentMean_ = ob.colwise().mean();
@@ -252,6 +266,10 @@ namespace raisim {
 
       }
 
+      // std::cout << "normalizing" << std::endl;
+      // std::cout << "player" << ob << std::endl;
+      // std::cout << "opponent" << opponentOb << std::endl;
+
 #pragma omp parallel for schedule(auto)
       for(int i=0; i<num_envs_; i++) {
         ///PLAYER
@@ -262,6 +280,11 @@ namespace raisim {
         opponentOb.row(i) = (opponentOb.row(i) - opponentObMean_.transpose()).template cwiseQuotient<>(
           (opponentObVar_ + opponentEpsilon_).cwiseSqrt().transpose());
       }
+
+      // std::cout << "normalized" << std::endl;
+      // std::cout << "player" << ob << std::endl;
+      // std::cout << "opponent" << opponentOb << std::endl;
+
     }
 
     inline void perAgentStep(int agentId,

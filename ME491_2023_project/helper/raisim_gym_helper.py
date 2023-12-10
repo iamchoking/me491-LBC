@@ -51,11 +51,7 @@ def load_param(weight_path, env, actor, critic, optimizer, data_dir):
     var_csv_path = weight_dir + 'var' + iteration_number + '.csv'
     items_to_save = [weight_path, mean_csv_path, var_csv_path, weight_dir + "cfg.yaml", weight_dir + "Environment.hpp", weight_dir + "AnymalController_20190673.hpp"]
 
-    if items_to_save is not None:
-        pretrained_data_dir = data_dir + '/pretrained_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1]
-        os.makedirs(pretrained_data_dir)
-        for item_to_save in items_to_save:
-            copyfile(item_to_save, pretrained_data_dir+'/'+item_to_save.rsplit('/', 1)[1])
+    copy_files(items_to_save,to_dir=data_dir + '/pretrained_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1])
 
     # load observation scaling from files of pre-trained model
     env.load_scaling(weight_dir, iteration_number)
@@ -66,6 +62,13 @@ def load_param(weight_path, env, actor, critic, optimizer, data_dir):
     actor.distribution.load_state_dict(checkpoint['actor_distribution_state_dict'])
     critic.architecture.load_state_dict(checkpoint['critic_architecture_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+def copy_files(items_to_save,to_dir):
+    if items_to_save is None:
+        return
+    os.makedirs(to_dir)
+    for item_to_save in items_to_save:
+        copyfile(item_to_save, to_dir+'/'+item_to_save.rsplit('/', 1)[1])
 
 def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimizer, data_dir,opp_actor):
 
@@ -79,6 +82,9 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
         opp_checkpoint = torch.load(opp_weight_path)
         opp_actor.architecture.load_state_dict(opp_checkpoint['actor_architecture_state_dict'])
         opp_actor.distribution.load_state_dict(opp_checkpoint['actor_distribution_state_dict'])
+
+        items_to_save = [opp_weight_path, opp_weight_dir + 'mean' + opp_iteration_number + '.csv', opp_weight_dir + 'var' +opp_iteration_number+'.csv',opp_weight_dir + "Environment.hpp", opp_weight_dir + "AnymalController_20190673.hpp"]
+        copy_files(items_to_save,to_dir= data_dir + '/opponent_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1])
 
 
     if weight_path == "":
@@ -101,11 +107,7 @@ def load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, optimi
         critic.architecture.load_state_dict(checkpoint['critic_architecture_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    if items_to_save is not None:
-        pretrained_data_dir = data_dir + '/pretrained_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1]
-        os.makedirs(pretrained_data_dir)
-        for item_to_save in items_to_save:
-            copyfile(item_to_save, pretrained_data_dir+'/'+item_to_save.rsplit('/', 1)[1])
+        copy_files(items_to_save,to_dir= data_dir + '/pretrained_' + weight_path.rsplit('/', 1)[0].rsplit('/', 1)[1])
 
     # load observation scaling (ignores if directory is "")
     env.load_scaling(

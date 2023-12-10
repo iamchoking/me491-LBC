@@ -45,6 +45,8 @@ environment:
       coeff: 0.0
     tbone:
       coeff: 0.0
+    away:
+      coeff: 0.0
 
   reward_win:              100
   reward_lose:             -100

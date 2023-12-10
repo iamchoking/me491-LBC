@@ -76,7 +76,7 @@ if vis_only: # visualizer files are not stored
     cfg['environment']['num_envs'] = 1
     cfg['environment']['eval_every_n'] = 1
     cfg['environment']['max_time'] = 100
-    print('[VIS-ONLY] Simple Visualizatoin Mode')
+    print('[VIS-ONLY] Simple Visualization Mode')
 else:
     save_dir = home_path + "/ME491_2023_project/data/"+task_name+"/"+cfg_name+"/"
 
@@ -118,7 +118,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 opp_actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, opp_ob_dim, opp_act_dim),
                          ppo_module.MultivariateGaussianDiagonalCovariance(opp_act_dim,
                                                                            env.num_envs,
-                                                                           5.0,
+                                                                           0.1, # opponent shoul have no variation in its movement!
                                                                            NormalSampler(opp_act_dim),
                                                                            cfg['seed']),
                          device)
@@ -171,6 +171,11 @@ if not do_selftrain:
 else:
     load_param_selfplay(weight_path, opp_weight_path, env, actor, critic, ppo.optimizer, saver.data_dir, opp_actor)
 
+    # loaded graph is used for faster opponent action generation. use opp_actor if you want stdev in opp's actions
+    opp_mlp = ppo_module.MLP(cfg['architecture']['policy_net'],nn.LeakyReLU, opp_ob_dim, opp_act_dim)
+    opp_mlp.load_state_dict(torch.load(opp_weight_path)['actor_architecture_state_dict'])
+
+
 if starting_lr > 0: # reset the optimizer
     gym_logger.info("[PPO] Replacing Optimizer With Learning Rate: " + str(starting_lr))
     # gym_logger.info("[PPO] Previous State Dict : " + str(ppo.optimizer.state_dict()))
@@ -182,6 +187,9 @@ ppo.learning_rate = ppo.optimizer.param_groups[0]['lr']
 
 
 env.turn_off_visualization()
+
+opp_actor.distribution = ppo_module.MultivariateGaussianDiagonalCovariance(opp_act_dim,env.num_envs,0.00001,NormalSampler(opp_act_dim))
+# gym_logger.info("Opponent STD initialized with: " + str(opp_actor.distribution.std))
 
 def ppo_outer_loop(updates = 5000):
     for update in range(updates):
@@ -205,12 +213,6 @@ def ppo_outer_loop(updates = 5000):
             loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], nn.LeakyReLU, ob_dim, act_dim)
             loaded_graph.load_state_dict(torch.load(saver.data_dir+"/full_"+str(update)+'.pt')['actor_architecture_state_dict'])
 
-            # do the same for opponent
-            opp_loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'],nn.LeakyReLU, opp_ob_dim, opp_act_dim)
-
-            if do_selftrain:
-                opp_loaded_graph.load_state_dict(torch.load(opp_weight_path)['actor_architecture_state_dict'])
-
             env.turn_on_visualization()
             # env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
             env.start_video_recording(saver.data_dir.split('/')[-1] + "_iteration-"+str(update)+'.mp4')
@@ -220,16 +222,19 @@ def ppo_outer_loop(updates = 5000):
                     frame_start = time.time()
                     obs,opp_obs = env.observe(False)
                     # gym_logger.info(obs[0]) # CHECK OBS HERE
+
                     action = loaded_graph.architecture(torch.from_numpy(obs).cpu()).cpu().detach().numpy()
+
                     if not do_selftrain:
                         opp_action = np.zeros([1,opp_act_dim],dtype=np.float32)
                     else:
-                        opp_action = opp_loaded_graph.architecture(torch.from_numpy(opp_obs).cpu()).cpu().detach().numpy()
-                    # gym_logger.info(action)
-                    # gym_logger.info(opp_action)
+                        opp_action = opp_mlp.architecture(torch.from_numpy(opp_obs).cpu()).cpu().detach().numpy()
 
-                    # gym_logger.info("action: " + str(action.get_device()))
-                    # gym_logger.info("opp_action: " + str(opp_action.get_device()))
+                    # print("Actor obs:")
+                    # print(obs)
+                    # print("Opponent obs:")
+                    # print(opp_obs)
+                    # return
 
                     reward, dones = env.step(action, opp_action)
                     analyzer.add_reward_info(env.get_reward_info())
@@ -267,9 +272,11 @@ def ppo_outer_loop(updates = 5000):
             cur_time = time.time()
 
             action = ppo.act(obs)
+
             if do_selftrain:
-                with torch.no_grad():
-                    opp_action = opp_actor.sample(torch.from_numpy(opp_obs).to(device))[0]
+                # with torch.no_grad():             # sample version (slower, but can exhibit random behavior)
+                #     opp_action = opp_actor.sample(torch.from_numpy(opp_obs).to(device))[0]
+                opp_action = opp_mlp.architecture(torch.from_numpy(opp_obs).cpu()).detach().numpy()
 
             t_action += time.time()-cur_time
             cur_time  = time.time()
