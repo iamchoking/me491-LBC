@@ -66,7 +66,8 @@ def load_param(weight_path, env, actor, critic, optimizer, data_dir):
 def copy_files(items_to_save,to_dir):
     if items_to_save is None:
         return
-    os.makedirs(to_dir)
+    if not os.path.exists(to_dir):
+        os.makedirs(to_dir)
     for item_to_save in items_to_save:
         copyfile(item_to_save, to_dir+'/'+item_to_save.rsplit('/', 1)[1])
 

@@ -356,11 +356,6 @@ class AnymalController_20190673 {
 
     rewards->record("tbone", tboneScore*tboneMultiplier);
 
-    // opponent off center
-    Vec<3> oppPosVec;
-    world_->getObject(opponentObjectIdx_)->getPosition(0,oppPosVec);
-    rewards->record("opp_off_center",(std::max(1.0,oppPosVec.e().head(2).norm()) - 1.0) / 2);
-
   }
 
   inline void printStatus(raisim::World *world){

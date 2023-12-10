@@ -116,17 +116,17 @@ namespace raisim {
       }
 
       metrics_["cube_weight"]      = 0.0;
-      metrics_["win_consecutive"] = 0.0;
-      metrics_["interval_win"]     = 0.0;
-      metrics_["interval_lose"]    = 0.0;
-      metrics_["interval_draw"]    = 0.0;
+      metrics_["consecutive_wins"] = 0.0;
+      metrics_["win_interval"]     = 0.0;
+      metrics_["lose_interval"]    = 0.0;
+      metrics_["draw_interval"]    = 0.0;
       metrics_["win_falldown_100"]      = 0.0;
       metrics_["win_pushout_100"]       = 0.0;
       metrics_["lose_falldown_100"]     = 0.0;
       metrics_["lose_pushout_100"]      = 0.0;
-      metrics_["100_win"]          = 0.5;
-      metrics_["100_draw"]         = 0.5;
-      metrics_["100_lose"]         = 0.5;
+      metrics_["win_100"]          = 0.5;
+      metrics_["draw_100"]         = 0.5;
+      metrics_["lose_100"]         = 0.5;
       metrics_["score"]            = 0.0;
     }
 
@@ -282,12 +282,12 @@ namespace raisim {
     }
 
     // void processWin(){
-    //   // metrics_["interval_win"] = world_.getWorldTime() - timeLastWin_;
+    //   // metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
     //   // timeLastWin_ = world_.getWorldTime();
-    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.01;
-    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
-    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
-    //   // metrics_["win_consecutive"] += 1.0;
+    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
+    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+    //   // metrics_["consecutive_wins"] += 1.0;
     //   //
     //   // if(terminalFactor_ == 1){
     //   //   metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
@@ -300,12 +300,12 @@ namespace raisim {
     // }
 
     // void processLose(){
-    //   // metrics_["interval_lose"] = world_.getWorldTime() - timeLastLose_;
+    //   // metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
     //   // timeLastLose_ = world_.getWorldTime();
-    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
-    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.01;
-    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
-    //   // metrics_["win_consecutive"] = 0.0;
+    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
+    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+    //   // metrics_["consecutive_wins"] = 0.0;
     //   // if(terminalFactor_ == 1){
     //   //   metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
     //   //   metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
@@ -317,12 +317,12 @@ namespace raisim {
     // }
 
     // void processDraw(){
-    //   // metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+    //   // metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
     //   // timeLastDraw_ = world_.getWorldTime();
-    //   // metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
-    //   // metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
-    //   // metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
-    //   // metrics_["win_consecutive"] = 0.0;
+    //   // metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+    //   // metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+    //   // metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
+    //   // metrics_["consecutive_wins"] = 0.0;
     // }
 
     void handleDraw(){
@@ -339,12 +339,12 @@ namespace raisim {
         case 1: // win
           // std::cout << "Processing Metrics for Win... " << std::endl;
           metrics_["score"] += 1.0;
-          metrics_["interval_win"] = world_.getWorldTime() - timeLastWin_;
+          metrics_["win_interval"] = world_.getWorldTime() - timeLastWin_;
           timeLastWin_ = world_.getWorldTime();
-          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.01;
-          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
-          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
-          metrics_["win_consecutive"] += 1.0;
+          metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.01;
+          metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+          metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+          metrics_["consecutive_wins"] += 1.0;
 
           if(terminalFactor_ == 1){
             metrics_["win_falldown_100"] = metrics_["win_falldown_100"]*0.99+0.01;
@@ -358,12 +358,12 @@ namespace raisim {
         case 2: // lose
           // std::cout << "Processing Metrics for Loss... " << std::endl;
           metrics_["score"] -= 1.0;
-          metrics_["interval_lose"] = world_.getWorldTime() - timeLastLose_;
+          metrics_["lose_interval"] = world_.getWorldTime() - timeLastLose_;
           timeLastLose_ = world_.getWorldTime();
-          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
-          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.01;
-          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.00;
-          metrics_["win_consecutive"] = 0.0;
+          metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+          metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.01;
+          metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.00;
+          metrics_["consecutive_wins"] = 0.0;
           if(terminalFactor_ == 1){
             metrics_["lose_falldown_100"] = metrics_["lose_falldown_100"]*0.99+0.01;
             metrics_["lose_pushout_100"]  = metrics_["lose_pushout_100"]*0.99+0.00;
@@ -377,23 +377,23 @@ namespace raisim {
           // std::cout << "Processing Metrics for Draw Win... " << std::endl;
 
           metrics_["score"] += 0.01;
-          metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+          metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
           timeLastDraw_ = world_.getWorldTime();
-          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.003; //draw-win is about 0.3 win (can be a strat)
-          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.00;
-          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
-          metrics_["win_consecutive"] = 0.0;
+          metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.003; //draw-win is about 0.3 win (can be a strat)
+          metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.00;
+          metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
+          metrics_["consecutive_wins"] = 0.0;
           return;
         case 4: // draw-lose
           // std::cout << "Processing Metrics for Draw Loss... " << std::endl;
 
           metrics_["score"] -= 0.01;
-          metrics_["interval_draw"] = world_.getWorldTime() - timeLastDraw_;
+          metrics_["draw_interval"] = world_.getWorldTime() - timeLastDraw_;
           timeLastDraw_ = world_.getWorldTime();
-          metrics_["100_win" ] = metrics_["100_win" ]*0.99+0.00;
-          metrics_["100_lose"] = metrics_["100_lose"]*0.99+0.0001; //draw-loss is about 0.01 loss
-          metrics_["100_draw"] = metrics_["100_draw"]*0.99+0.01;
-          metrics_["win_consecutive"] = 0.0;
+          metrics_["win_100" ] = metrics_["win_100" ]*0.99+0.00;
+          metrics_["lose_100"] = metrics_["lose_100"]*0.99+0.0001; //draw-loss is about 0.01 loss
+          metrics_["draw_100"] = metrics_["draw_100"]*0.99+0.01;
+          metrics_["consecutive_wins"] = 0.0;
           return;
       }
     }
