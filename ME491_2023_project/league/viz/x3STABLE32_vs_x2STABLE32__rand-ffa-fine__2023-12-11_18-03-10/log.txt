@@ -1,0 +1,13 @@
+[INFO::2023-12-11 18:03:10,544] [READY] Preprocessing COMPLETE
+[INFO::2023-12-11 18:03:13,100] [PPO] Desired KL Divergence is 0.01
+[INFO::2023-12-11 18:03:13,165] [PPO] Replacing Optimizer With Learning Rate: 0.001
+[INFO::2023-12-11 18:03:13,166] [GAME] Game for x3STABLE32(version3) ready!
+[INFO::2023-12-11 18:03:13,166]      Opponent: ME491_2023_project/league/athletes/STABLE32/x2STABLE32_1710.pt
+[INFO::2023-12-11 18:03:13,167]      Config : 
+{'seed': 1, 'record_video': 'yes', 'rules': 'rand', 'reward': 'ffa', 'stride': 'fine', 'environment': {'render': True, 'num_envs': 1, 'eval_every_n': 1, 'max_time': 20, 'plot_metric_n': 10, 'num_threads': 32, 'simulation_dt': 0.0025, 'control_dt': 0.01, 'action_std': 0.3, 'reward': {'time': {'coeff': 0.0}, 'terminal': {'coeff': 0.0}, 'slip': {'coeff': 0.0}, 'flight': {'coeff': 0.0}, 'tilt': {'coeff': 0.0}, 'spin': {'coeff': 0.0}, 'edge': {'coeff': 0.0}, 'face': {'coeff': 0.0}, 'ram': {'coeff': 0.0}, 'center': {'coeff': 0.3}, 'tbone': {'coeff': 0.0}, 'away': {'coeff': 0.0}, 'opp_off_center': {'coeff': 0.0}}, 'reward_win': 100, 'reward_lose': -100, 'reward_draw_win': -30, 'reward_draw_lose': -50, 'training_mode': 1, 'training_init_shuffle_position': True, 'training_init_shuffle_player_heading': True, 'training_init_shuffle_opponent_heading': True, 'training_dummy_opponent': False, 'curriculum_mass_start': 16, 'curriculum_win_streak': 10, 'curriculum_mass_incr': 0.1, 'curriculum_cube_shuffle': True, 'stability_mode': False, 'stability_teleport': 2.0, 'stability_win_decay': 0.9}, 'learning': {'kl': 0.01, 'lr': 0.001}, 'evaluation': {'iteration': 10000}, 'architecture': {'policy_net': [128, 128], 'value_net': [128, 128]}}
+[INFO::2023-12-11 18:03:13,167] [GAME] Here we go!!
+[INFO::2023-12-11 18:03:13,167] [SAVE] Saving the current game : x3STABLE32_vs_x2STABLE32__rand-ffa-fine
+[INFO::2023-12-11 18:03:13,171] [SAVE] Saved current target network(s) at : /home/hyungho/raisim_ws/me491-LBC/ME491_2023_project/league/viz/x3STABLE32_vs_x2STABLE32__rand-ffa-fine__2023-12-11_18-03-10/x3STABLE32_2460.pt
+[INFO::2023-12-11 18:03:13,193] [EVAL-VIZ] Visualization ON
+[INFO::2023-12-11 18:03:35,669] [EVAL-SAVE] Visualization Complete
+[INFO::2023-12-11 18:03:35,674] [EVAL-SAVE] Update #0( Iteration #2460) Saved.

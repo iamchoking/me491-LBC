@@ -1,0 +1,88 @@
+seed: 1
+record_video: yes
+
+rules: rand # rand, vanilla
+reward: std
+stride: fine
+
+environment:
+  render: true
+#  for training
+  num_envs: 1
+  eval_every_n: 1
+  record_every_n: 3
+  max_time: 20    # max_time larger than 10 is required to observe draws.
+
+  plot_metric_n: 10
+
+  num_threads: 32
+  simulation_dt: 0.0025
+  control_dt: 0.01
+  action_std: 0.3
+
+  reward:
+    time:
+      coeff: 0.0
+
+    terminal: # used in stability training
+      coeff: 1.0
+
+#    [STD]
+##    PENALIZE
+    slip:
+      coeff: -0.8
+    flight:
+      coeff: -0.2
+    tilt:
+      coeff: -0.3
+    spin:
+      coeff: -0.5
+    edge:
+      coeff: -1
+
+#    PROMOTE
+    face:
+      coeff: 0.6
+    ram:
+      coeff: 1
+    center:
+      coeff: 0
+    tbone:
+      coeff: 0.1
+    away:
+      coeff: 0.0
+    opp_off_center:
+      coeff: 1.0
+
+  reward_win: 100
+  reward_lose: -100
+  reward_draw_win: -50
+  reward_draw_lose: -50
+
+  training_mode: 1           #0: cube, 1: self-train
+  training_init_shuffle_position: true
+  training_init_shuffle_player_heading: true
+  training_init_shuffle_opponent_heading: true
+  training_dummy_opponent: false
+
+  curriculum_mass_start: 0.5
+  curriculum_win_streak: 10
+  curriculum_mass_incr: 0.1
+  curriculum_cube_shuffle: true
+  curriculum_head_shuffle: true
+
+  # Stability Training
+  stability_mode: false
+  stability_teleport: 3.0
+  stability_win_decay: 0.9
+
+learning:
+  kl: 0.01
+  lr: 0.001
+
+evaluation:
+  iteration: 10000 #Write your final submit policy iteration. ex) if you submit full_10000.pt
+
+architecture:
+  policy_net: [128, 128]
+  value_net: [128, 128]

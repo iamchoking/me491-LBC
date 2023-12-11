@@ -42,9 +42,14 @@ environment:
     ram:
       coeff: 0.0
     center:
-      coeff: 0.0
+      coeff: 0.3
     tbone:
       coeff: 0.0
+    away:
+      coeff: 0.0
+    opp_off_center:
+      coeff: 0.0
+
 
   reward_win:              100
   reward_lose:             -100

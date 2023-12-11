@@ -1,0 +1,13 @@
+[INFO::2023-12-11 15:03:41,702] [READY] Preprocessing COMPLETE
+[INFO::2023-12-11 15:03:41,846] [PPO] Desired KL Divergence is 0.01
+[INFO::2023-12-11 15:03:41,908] [PPO] Replacing Optimizer With Learning Rate: 0.001
+[INFO::2023-12-11 15:03:41,908] [GAME] Game for x1PASSIVE(version1) ready!
+[INFO::2023-12-11 15:03:41,909]      Opponent: ME491_2023_project/league/athletes/STABLE32/x1STABLE32_1410.pt
+[INFO::2023-12-11 15:03:41,909]      Config : 
+{'seed': 1, 'record_video': 'yes', 'rules': 'rand', 'reward': 'runaway', 'stride': 'fine', 'environment': {'render': True, 'num_envs': 1, 'eval_every_n': 1, 'max_time': 20, 'plot_metric_n': 10, 'num_threads': 32, 'simulation_dt': 0.0025, 'control_dt': 0.01, 'action_std': 0.3, 'reward': {'time': {'coeff': 0.0}, 'terminal': {'coeff': 0.0}, 'slip': {'coeff': 0.0}, 'flight': {'coeff': 0.0}, 'tilt': {'coeff': 0.0}, 'spin': {'coeff': 0.0}, 'edge': {'coeff': -1}, 'face': {'coeff': 0.0}, 'ram': {'coeff': 0.0}, 'center': {'coeff': 2.0}, 'tbone': {'coeff': 0.5}, 'away': {'coeff': 1.0}, 'opp_off_center': {'coeff': 0.3}}, 'reward_win': 100, 'reward_lose': -200, 'reward_draw_win': 5, 'reward_draw_lose': -80, 'training_mode': 1, 'training_init_shuffle_position': True, 'training_init_shuffle_player_heading': True, 'training_init_shuffle_opponent_heading': False, 'training_dummy_opponent': False, 'curriculum_mass_start': 16, 'curriculum_win_streak': 10, 'curriculum_mass_incr': 0.1, 'curriculum_cube_shuffle': True, 'stability_mode': False, 'stability_teleport': -1, 'stability_win_decay': 0.9}, 'learning': {'kl': 0.01, 'lr': 0.001}, 'evaluation': {'iteration': 10000}, 'architecture': {'policy_net': [128, 128], 'value_net': [128, 128]}}
+[INFO::2023-12-11 15:03:41,909] [GAME] Here we go!!
+[INFO::2023-12-11 15:03:41,910] [SAVE] Saving the current game : x1PASSIVE_vs_x1STABLE32__rand-runaway-fine
+[INFO::2023-12-11 15:03:41,914] [SAVE] Saved current target network(s) at : /home/hyungho/raisim_ws/me491-LBC/ME491_2023_project/league/viz/x1PASSIVE_vs_x1STABLE32__rand-runaway-fine__2023-12-11_15-03-41/x1PASSIVE_1680.pt
+[INFO::2023-12-11 15:03:41,937] [EVAL-VIZ] Visualization ON
+[INFO::2023-12-11 15:04:03,654] [EVAL-SAVE] Visualization Complete
+[INFO::2023-12-11 15:04:03,660] [EVAL-SAVE] Update #0( Iteration #1680) Saved.
